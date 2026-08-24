@@ -1,4 +1,4 @@
-import { useAuthStore } from '@/stores/auth';
+import { useAuthStore } from "@/stores/auth";
 
 export interface StreamPayload {
   promptId: string;
@@ -17,18 +17,18 @@ function getSseData(event: string): string | null {
   const dataLines: string[] = [];
 
   for (const line of event.split(/\r?\n/)) {
-    if (!line || line.startsWith(':')) continue;
+    if (!line || line.startsWith(":")) continue;
 
-    const separator = line.indexOf(':');
+    const separator = line.indexOf(":");
     const field = separator === -1 ? line : line.slice(0, separator);
-    if (field !== 'data') continue;
+    if (field !== "data") continue;
 
-    let value = separator === -1 ? '' : line.slice(separator + 1);
-    if (value.startsWith(' ')) value = value.slice(1);
+    let value = separator === -1 ? "" : line.slice(separator + 1);
+    if (value.startsWith(" ")) value = value.slice(1);
     dataLines.push(value);
   }
 
-  return dataLines.length ? dataLines.join('\n') : null;
+  return dataLines.length ? dataLines.join("\n") : null;
 }
 
 /**
@@ -65,29 +65,29 @@ export function streamChat(payload: StreamPayload, handlers: StreamHandlers): Ab
     const consumeEvent = (event: string): boolean => {
       const data = getSseData(event);
       if (data === null) return false;
-      if (data === '[DONE]') return true;
+      if (data === "[DONE]") return true;
 
       let json: { error?: { message?: string }; choices?: Array<{ delta?: { content?: string } }> };
       try {
         json = JSON.parse(data);
       } catch {
-        throw new Error('服务器返回了无法解析的 SSE 数据');
+        throw new Error("服务器返回了无法解析的 SSE 数据");
       }
 
       if (json.error?.message) {
         throw new Error(json.error.message);
       }
 
-      const delta = json.choices?.[0]?.delta?.content ?? '';
+      const delta = json.choices?.[0]?.delta?.content ?? "";
       if (delta) handlers.onChunk(delta);
       return false;
     };
 
     try {
-      const res = await fetch('/api/chat/stream', {
-        method: 'POST',
+      const res = await fetch("/api/chat/stream", {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
           Authorization: `Bearer ${auth.token}`,
         },
         body: JSON.stringify(payload),
@@ -99,17 +99,17 @@ export function streamChat(payload: StreamPayload, handlers: StreamHandlers): Ab
         throw new Error(body?.message || `请求失败（HTTP ${res.status}）`);
       }
       if (!res.body) {
-        throw new Error('浏览器未收到可读取的响应流');
+        throw new Error("浏览器未收到可读取的响应流");
       }
 
-      const contentType = res.headers.get('content-type') ?? '';
-      if (!contentType.includes('text/event-stream')) {
-        throw new Error('服务器未返回 SSE 响应');
+      const contentType = res.headers.get("content-type") ?? "";
+      if (!contentType.includes("text/event-stream")) {
+        throw new Error("服务器未返回 SSE 响应");
       }
 
       reader = res.body.getReader();
       const decoder = new TextDecoder();
-      let buffer = '';
+      let buffer = "";
 
       while (true) {
         const { done, value } = await reader.read();
@@ -119,7 +119,7 @@ export function streamChat(payload: StreamPayload, handlers: StreamHandlers): Ab
 
         // 同时兼容 LF 与 CRLF；最后一段不完整事件保留到下一次读取。
         const events = buffer.split(/\r?\n\r?\n/);
-        buffer = events.pop() ?? '';
+        buffer = events.pop() ?? "";
 
         for (const event of events) {
           if (consumeEvent(event)) {
@@ -137,7 +137,7 @@ export function streamChat(payload: StreamPayload, handlers: StreamHandlers): Ab
       }
       notifyDone();
     } catch (err) {
-      if ((err as Error).name === 'AbortError') {
+      if ((err as Error).name === "AbortError") {
         notifyDone();
         return;
       }
