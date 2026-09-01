@@ -9,6 +9,8 @@ export interface ChatMessage {
 export interface ChatParams {
   model: string;
   messages: ChatMessage[];
+  /** 当前用户的自定义 key；未提供时使用服务端默认 key */
+  apiKey?: string;
 }
 
 export interface TokenUsage {
@@ -49,7 +51,7 @@ function mapUsage(raw: { prompt_tokens?: unknown; completion_tokens?: unknown; t
 /** 未配置 API Key 时给出明确提示，避免把晦涩的 401 透传给用户 */
 function assertKey(apiKey: string, name: string) {
   if (!apiKey) {
-    throw new AppError(500, 50000, `未配置 ${name} API Key，请在 backend/.env 中填写`);
+    throw new AppError(500, 50000, `未配置 ${name} API Key，请在 Provider 配置中填写，或在 backend/.env 中配置`);
   }
 }
 
@@ -94,12 +96,13 @@ export function createOpenAIAdapter(name: string, cfg: AdapterConfig): AIAdapter
   const baseUrl = cfg.baseUrl.replace(/\/$/, "");
 
   async function chat(params: ChatParams): Promise<ChatResult> {
-    assertKey(cfg.apiKey, name);
+    const apiKey = params.apiKey ?? cfg.apiKey;
+    assertKey(apiKey, name);
     const res = await fetch(`${baseUrl}/chat/completions`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${cfg.apiKey}`,
+        Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({ model: params.model, messages: params.messages, stream: false }),
     });
@@ -114,13 +117,14 @@ export function createOpenAIAdapter(name: string, cfg: AdapterConfig): AIAdapter
   }
 
   async function* stream(params: ChatParams, signal: AbortSignal): AsyncGenerator<StreamEvent> {
-    assertKey(cfg.apiKey, name);
+    const apiKey = params.apiKey ?? cfg.apiKey;
+    assertKey(apiKey, name);
     const res = await fetch(`${baseUrl}/chat/completions`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Accept: "text/event-stream",
-        Authorization: `Bearer ${cfg.apiKey}`,
+        Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
         model: params.model,

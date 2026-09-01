@@ -11,11 +11,15 @@ const userSchema = new Schema(
     nickname: { type: String, default: '', maxlength: 30, trim: true },
     // 头像：相对 URL 路径（如 /uploads/xxx.png），默认空
     avatar: { type: String, default: '' },
+    // 用户自定义 API Key：select: false，普通用户查询不会带出明文密钥
+    deepseekApiKey: { type: String, default: '', select: false },
+    qwenApiKey: { type: String, default: '', select: false },
+    anthropicApiKey: { type: String, default: '', select: false },
   },
   { timestamps: true },
 );
 
-/** 推导出的文档类型：{ username, password, nickname, avatar, createdAt, updatedAt } */
+/** 推导出的文档类型：包含用户级 Provider API Key（仅后端显式查询时使用） */
 export type UserDoc = InferSchemaType<typeof userSchema>;
 
 export const User = model('User', userSchema);

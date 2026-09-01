@@ -20,7 +20,7 @@ const ANTHROPIC_VERSION = '2023-06-01';
 /** 未配置 API Key 时给出明确提示，避免把晦涩的 401 透传给用户 */
 function assertKey(apiKey: string, name: string) {
   if (!apiKey) {
-    throw new AppError(500, 50000, `未配置 ${name} API Key，请在 backend/.env 中填写`);
+    throw new AppError(500, 50000, `未配置 ${name} API Key，请在 Provider 配置中填写，或在 backend/.env 中配置`);
   }
 }
 
@@ -86,7 +86,8 @@ export function createAnthropicAdapter(name: string, cfg: AdapterConfig): AIAdap
   const baseUrl = cfg.baseUrl.replace(/\/$/, '');
 
   async function chat(params: ChatParams): Promise<ChatResult> {
-    assertKey(cfg.apiKey, name);
+    const apiKey = params.apiKey ?? cfg.apiKey;
+    assertKey(apiKey, name);
     const { system, messages } = toAnthropicMessages(params.messages);
     const body: Record<string, unknown> = { model: params.model, max_tokens: 4096, messages };
     if (system) body.system = system;
@@ -95,7 +96,7 @@ export function createAnthropicAdapter(name: string, cfg: AdapterConfig): AIAdap
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': cfg.apiKey,
+        'x-api-key': apiKey,
         'anthropic-version': ANTHROPIC_VERSION,
       },
       body: JSON.stringify(body),
@@ -113,7 +114,8 @@ export function createAnthropicAdapter(name: string, cfg: AdapterConfig): AIAdap
   }
 
   async function* stream(params: ChatParams, signal: AbortSignal): AsyncGenerator<StreamEvent> {
-    assertKey(cfg.apiKey, name);
+    const apiKey = params.apiKey ?? cfg.apiKey;
+    assertKey(apiKey, name);
     const { system, messages } = toAnthropicMessages(params.messages);
     const body: Record<string, unknown> = {
       model: params.model,
@@ -128,7 +130,7 @@ export function createAnthropicAdapter(name: string, cfg: AdapterConfig): AIAdap
       headers: {
         'Content-Type': 'application/json',
         Accept: 'text/event-stream',
-        'x-api-key': cfg.apiKey,
+        'x-api-key': apiKey,
         'anthropic-version': ANTHROPIC_VERSION,
       },
       body: JSON.stringify(body),

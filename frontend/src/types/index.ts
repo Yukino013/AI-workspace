@@ -65,3 +65,12 @@ export interface ChatMessage {
   role: ChatRole;
   content: string;
 }
+
+export interface ProviderConfig {
+  id: 'deepseek' | 'qwen' | 'anthropic';
+  name: string;
+  model: string;
+  configured: boolean;
+  hasCustomKey: boolean;
+  maskedKey: string;
+}

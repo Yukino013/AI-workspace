@@ -8,6 +8,7 @@ import chatRoutes, { recordRoutes } from './routes/chat.routes.js';
 import { errorHandler, notFound } from './middleware/error.middleware.js';
 import { config } from './config/index.js';
 import { ok } from './utils/response.js';
+import providerRoutes from './routes/provider.routes.js';
 
 const app = express();
 
@@ -30,6 +31,7 @@ app.get('/api/health', (_req, res) => {
 
 // 业务路由
 app.use('/api/auth', authRoutes);
+app.use('/api/providers', providerRoutes);
 app.use('/api/prompts', promptRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/chat-records', recordRoutes);

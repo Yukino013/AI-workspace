@@ -5,6 +5,7 @@ import { AIService } from "./ai/ai.service.js";
 import type { ChatMessage, TokenUsage } from "./ai/openai-client.js";
 import { extractVariables, renderPrompt } from "../utils/variables.js";
 import { AppError } from "../utils/AppError.js";
+import { getApiKeyForModel } from './provider.service.js';
 
 export interface ChatRunInput {
   promptId: string;
@@ -100,7 +101,7 @@ export async function runChat(userId: string, input: ChatRunInput) {
   const start = Date.now();
 
   try {
-    const result = await AIService.chat({ model: input.model, messages: prepared.messages });
+    const result = await AIService.chat({ model: input.model, messages: prepared.messages, apiKey: await getApiKeyForModel(userId, input.model) });
     const record = await ChatRecord.create({
       userId,
       promptId: prepared.promptId,
@@ -143,7 +144,7 @@ export async function streamChat(userId: string, prepared: PreparedChat, model: 
   let usage = zeroUsage();
 
   try {
-    for await (const event of AIService.stream({ model, messages: prepared.messages }, handlers.signal)) {
+    for await (const event of AIService.stream({ model, messages: prepared.messages, apiKey: await getApiKeyForModel(userId, model) }, handlers.signal)) {
       if (event.type === "delta") {
         output += event.content;
         handlers.onDelta(event.content);
