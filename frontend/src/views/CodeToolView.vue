@@ -1,17 +1,11 @@
 <script setup lang="ts">
-import FeaturePlaceholder from '@/components/common/FeaturePlaceholder.vue';
-
-const items = [
-  '后续接入 explain / translate / refactor / review / test 场景',
-  '支持粘贴代码后直接生成场景化 Prompt',
-  '结果可写入代码工具历史记录，再统一检索',
-];
+import { onMounted, ref, shallowRef } from 'vue'; import { ElMessage } from 'element-plus'; import { getCodeTools } from '@/api/code-tool'; import { MODEL_OPTIONS } from '@/utils/constants'; import { streamEndpoint } from '@/utils/sse'; import { md } from '@/utils/markdown'; import type { CodeTool } from '@/types';
+const tools = ref<CodeTool[]>([]); const selected = shallowRef('explain'); const model = shallowRef(MODEL_OPTIONS[0].value); const code = shallowRef(''); const language = shallowRef(''); const output = shallowRef(''); const running = shallowRef(false); const aborter = shallowRef<AbortController | null>(null);
+const activeTool = () => tools.value.find((item) => item.key === selected.value);
+function run() { if (!code.value.trim() || running.value) { if (!code.value.trim()) ElMessage.warning('请先粘贴代码'); return; } output.value = ''; running.value = true; const controller = streamEndpoint(`/api/code-tools/${selected.value}/stream`, { model: model.value, code: code.value, language: language.value || undefined }, { onChunk: (text) => output.value += text, onDone: () => { running.value = false; aborter.value = null; }, onError: (err) => { running.value = false; aborter.value = null; ElMessage.error(err.message); } }); aborter.value = controller; }
+function stop() { aborter.value?.abort(); aborter.value = null; running.value = false; }
+async function copy() { await navigator.clipboard.writeText(output.value); ElMessage.success('结果已复制'); }
+onMounted(async () => { tools.value = await getCodeTools(); });
 </script>
-
-<template>
-  <FeaturePlaceholder
-    title="代码工具"
-    subtitle="基于固定场景模板的代码解释与改写入口。"
-    :items="items"
-  />
-</template>
+<template><div class="tool-page"><header class="heading"><div><h2>代码工具</h2><p>选择场景，粘贴代码，流式获取处理结果。</p></div><el-select v-model="model" style="width: 190px"><el-option v-for="option in MODEL_OPTIONS" :key="option.value" v-bind="option" /></el-select></header><div class="tool-tabs"><button v-for="tool in tools" :key="tool.key" :class="{ active: selected === tool.key }" @click="selected = tool.key"><strong>{{ tool.name }}</strong><span>{{ tool.description }}</span></button></div><div class="work-grid"><el-card shadow="never" class="input-panel"><div class="panel-title"><span>{{ activeTool()?.name }}</span><el-input v-model="language" placeholder="语言（可选，如 TypeScript）" style="width: 190px" /></div><el-input v-model="code" type="textarea" :rows="20" resize="none" :placeholder="activeTool()?.inputHint" /><div class="actions"><el-button v-if="running" @click="stop">停止</el-button><el-button type="primary" :loading="running" @click="run">运行</el-button></div></el-card><el-card shadow="never" class="output-panel"><div class="panel-title"><span>处理结果</span><el-button v-if="output" link type="primary" @click="copy">复制</el-button></div><div v-if="output" class="markdown-body result" v-html="md.render(output)"></div><el-empty v-else description="运行后结果会显示在这里" /></el-card></div></div></template>
+<style scoped>.tool-page { max-width: 1200px; margin: 0 auto; padding: 24px 16px; }.heading, .panel-title { display: flex; align-items: center; justify-content: space-between; gap: 16px; }.heading { margin-bottom: 18px; }.heading h2 { margin: 0; }.heading p { margin: 6px 0 0; color: var(--app-muted); font-size: 13px; }.tool-tabs { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-bottom: 16px; }.tool-tabs button { display: grid; gap: 5px; min-height: 70px; padding: 12px; border: 1px solid var(--el-border-color-light); border-radius: 6px; background: var(--app-bg); color: var(--app-text); text-align: left; cursor: pointer; }.tool-tabs button.active { border-color: var(--el-color-primary); background: var(--el-color-primary-light-9); }.tool-tabs span { color: var(--app-muted); font-size: 12px; }.work-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }.input-panel, .output-panel { background: var(--app-bg); }.panel-title { margin-bottom: 12px; font-weight: 600; }.actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }.result { height: 475px; overflow: auto; padding: 12px; background: var(--el-fill-color-lighter); border-radius: 6px; word-break: break-word; } @media (max-width: 800px) { .tool-tabs { grid-template-columns: repeat(2, 1fr); }.work-grid { grid-template-columns: 1fr; }.heading { align-items: flex-start; flex-direction: column; } }</style>

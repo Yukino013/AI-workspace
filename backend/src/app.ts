@@ -9,6 +9,9 @@ import { errorHandler, notFound } from './middleware/error.middleware.js';
 import { config } from './config/index.js';
 import { ok } from './utils/response.js';
 import providerRoutes from './routes/provider.routes.js';
+import conversationRoutes from './routes/conversation.routes.js';
+import codeToolRoutes from './routes/code-tool.routes.js';
+import historyRoutes from './routes/history.routes.js';
 
 const app = express();
 
@@ -32,6 +35,9 @@ app.get('/api/health', (_req, res) => {
 // 业务路由
 app.use('/api/auth', authRoutes);
 app.use('/api/providers', providerRoutes);
+app.use('/api/conversations', conversationRoutes);
+app.use('/api/code-tools', codeToolRoutes);
+app.use('/api/history', historyRoutes);
 app.use('/api/prompts', promptRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/chat-records', recordRoutes);

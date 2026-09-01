@@ -1,17 +1,10 @@
 <script setup lang="ts">
-import FeaturePlaceholder from '@/components/common/FeaturePlaceholder.vue';
-
-const items = [
-  '后续聚合对话会话与代码工具结果',
-  '支持关键词搜索和来源筛选',
-  '提供继续对话、复制结果、再次运行等复用动作',
-];
+import { onMounted, ref, shallowRef } from 'vue'; import { ElMessage } from 'element-plus'; import { getHistory } from '@/api/history'; import { md } from '@/utils/markdown'; import type { HistoryItem } from '@/types';
+const keyword = shallowRef(''); const type = shallowRef(''); const page = shallowRef(1); const pageSize = shallowRef(20); const total = shallowRef(0); const loading = shallowRef(false); const items = ref<HistoryItem[]>([]); const detail = ref<HistoryItem | null>(null); const visible = shallowRef(false);
+function onPageChange(value: number) { page.value = value; load(); }
+async function load() { loading.value = true; try { const data = await getHistory({ keyword: keyword.value || undefined, type: type.value || undefined, page: page.value, pageSize: pageSize.value }); items.value = data.items; total.value = data.total; } finally { loading.value = false; } }
+function search() { page.value = 1; load(); } function open(item: HistoryItem) { detail.value = item; visible.value = true; } async function copy() { if (!detail.value) return; await navigator.clipboard.writeText(detail.value.output); ElMessage.success('结果已复制'); } function format(v: string) { const d = new Date(v); return Number.isNaN(d.getTime()) ? v : d.toLocaleString(); }
+onMounted(load);
 </script>
-
-<template>
-  <FeaturePlaceholder
-    title="历史记录"
-    subtitle="统一检索对话与代码工具记录。"
-    :items="items"
-  />
-</template>
+<template><div class="history-page"><div class="toolbar"><div><h2>历史记录</h2><span>对话与代码工具结果统一检索</span></div><div class="filters"><el-input v-model="keyword" clearable placeholder="搜索标题、输入或输出" @keyup.enter="search" @clear="search" /><el-select v-model="type" clearable placeholder="全部来源" @change="search"><el-option label="AI 对话" value="chat" /><el-option label="代码工具" value="code-tool" /></el-select><el-button type="primary" @click="search">搜索</el-button></div></div><el-table v-loading="loading" :data="items" empty-text="暂无历史记录"><el-table-column label="来源" width="110"><template #default="{ row }"><el-tag :type="row.type === 'chat' ? 'info' : 'success'">{{ row.type === 'chat' ? 'AI 对话' : '代码工具' }}</el-tag></template></el-table-column><el-table-column prop="title" label="标题" min-width="230" show-overflow-tooltip /><el-table-column prop="model" label="模型" width="180" /><el-table-column label="时间" width="180"><template #default="{ row }">{{ format(row.createdAt) }}</template></el-table-column><el-table-column label="操作" width="90" align="right"><template #default="{ row }"><el-button link type="primary" @click="open(row)">查看</el-button></template></el-table-column></el-table><el-pagination v-if="total > pageSize" class="pagination" layout="prev, pager, next, total" :total="total" :page-size="pageSize" :current-page="page" @current-change="onPageChange" /><el-dialog v-model="visible" title="历史详情" width="760"><template v-if="detail"><el-descriptions :column="2" border size="small"><el-descriptions-item label="来源">{{ detail.type === 'chat' ? 'AI 对话' : '代码工具' }}</el-descriptions-item><el-descriptions-item label="模型">{{ detail.model }}</el-descriptions-item><el-descriptions-item label="标题" :span="2">{{ detail.title }}</el-descriptions-item></el-descriptions><h4>输入</h4><pre class="content">{{ detail.input || '-' }}</pre><div class="result-head"><h4>输出</h4><el-button link type="primary" @click="copy">复制结果</el-button></div><div class="content markdown-body" v-html="md.render(detail.output || '')"></div></template></el-dialog></div></template>
+<style scoped>.history-page { padding: 24px 16px; }.toolbar { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; margin-bottom: 18px; }.toolbar h2 { margin: 0 0 5px; }.toolbar span { color: var(--app-muted); font-size: 13px; }.filters { display: flex; gap: 10px; }.filters .el-input { width: 250px; }.filters .el-select { width: 140px; }.pagination { margin-top: 16px; justify-content: flex-end; }h4 { margin: 18px 0 8px; }.content { max-height: 260px; overflow: auto; padding: 12px; margin: 0; white-space: pre-wrap; word-break: break-word; background: var(--el-fill-color-lighter); border-radius: 6px; }.result-head { display: flex; justify-content: space-between; align-items: center; } @media (max-width: 800px) { .toolbar { align-items: stretch; flex-direction: column; }.filters { flex-wrap: wrap; }.filters .el-input { width: 100%; } }</style>

@@ -12,6 +12,35 @@ export interface StreamHandlers {
   onError?: (err: Error) => void;
 }
 
+export function streamEndpoint(endpoint: string, payload: unknown, handlers: StreamHandlers): AbortController {
+  const controller = new AbortController();
+  const auth = useAuthStore();
+  void (async () => {
+    let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+    let terminal = false;
+    const done = () => { if (!terminal) { terminal = true; handlers.onDone?.(); } };
+    const error = (err: Error) => { if (!terminal) { terminal = true; handlers.onError?.(err); } };
+    const consume = (event: string) => {
+      const data = getSseData(event); if (data === null) return false; if (data === '[DONE]') return true;
+      let json: { error?: { message?: string }; choices?: Array<{ delta?: { content?: string } }> };
+      try { json = JSON.parse(data); } catch { throw new Error('服务器返回了无法解析的 SSE 数据'); }
+      if (json.error?.message) throw new Error(json.error.message);
+      const delta = json.choices?.[0]?.delta?.content ?? ''; if (delta) handlers.onChunk(delta); return false;
+    };
+    try {
+      const res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${auth.token}` }, body: JSON.stringify(payload), signal: controller.signal });
+      if (!res.ok) { const body = await res.json().catch(() => null); throw new Error(body?.message || `请求失败（HTTP ${res.status}）`); }
+      if (!res.body) throw new Error('浏览器未收到可读取的响应流');
+      const contentType = res.headers.get('content-type') ?? '';
+      if (!contentType.includes('text/event-stream')) throw new Error('服务器未返回 SSE 响应');
+      reader = res.body.getReader(); const decoder = new TextDecoder(); let buffer = '';
+      while (true) { const { done: ended, value } = await reader.read(); if (ended) break; buffer += decoder.decode(value, { stream: true }); const events = buffer.split(/\r?\n\r?\n/); buffer = events.pop() ?? ''; for (const event of events) if (consume(event)) { await reader.cancel(); done(); return; } }
+      buffer += decoder.decode(); if (buffer.trim()) consume(buffer); done();
+    } catch (err) { if ((err as Error).name === 'AbortError') done(); else { controller.abort(); error(err as Error); } } finally { reader?.releaseLock(); }
+  })();
+  return controller;
+}
+
 /** 按 SSE 规范提取一个事件的 data 字段；注释/心跳事件返回 null。 */
 function getSseData(event: string): string | null {
   const dataLines: string[] = [];
@@ -43,110 +72,5 @@ function getSseData(event: string): string | null {
  * 返回 AbortController，调用 .abort() 可停止生成。
  */
 export function streamChat(payload: StreamPayload, handlers: StreamHandlers): AbortController {
-  const controller = new AbortController();
-  const auth = useAuthStore();
-
-  void (async () => {
-    let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
-    let terminalCallbackCalled = false;
-
-    const notifyDone = () => {
-      if (terminalCallbackCalled) return;
-      terminalCallbackCalled = true;
-      handlers.onDone?.();
-    };
-
-    const notifyError = (error: Error) => {
-      if (terminalCallbackCalled) return;
-      terminalCallbackCalled = true;
-      handlers.onError?.(error);
-    };
-
-    const consumeEvent = (event: string): boolean => {
-      const data = getSseData(event);
-      if (data === null) return false;
-      if (data === "[DONE]") return true;
-
-      let json: { error?: { message?: string }; choices?: Array<{ delta?: { content?: string } }> };
-      try {
-        json = JSON.parse(data);
-      } catch {
-        throw new Error("服务器返回了无法解析的 SSE 数据");
-      }
-
-      if (json.error?.message) {
-        throw new Error(json.error.message);
-      }
-
-      const delta = json.choices?.[0]?.delta?.content ?? "";
-      if (delta) handlers.onChunk(delta);
-      return false;
-    };
-
-    try {
-      const res = await fetch("/api/chat/stream", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${auth.token}`,
-        },
-        body: JSON.stringify(payload),
-        signal: controller.signal,
-      });
-
-      if (!res.ok) {
-        const body = await res.json().catch(() => null);
-        throw new Error(body?.message || `请求失败（HTTP ${res.status}）`);
-      }
-      if (!res.body) {
-        throw new Error("浏览器未收到可读取的响应流");
-      }
-
-      const contentType = res.headers.get("content-type") ?? "";
-      if (!contentType.includes("text/event-stream")) {
-        throw new Error("服务器未返回 SSE 响应");
-      }
-
-      reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-
-        // 同时兼容 LF 与 CRLF；最后一段不完整事件保留到下一次读取。
-        const events = buffer.split(/\r?\n\r?\n/);
-        buffer = events.pop() ?? "";
-
-        for (const event of events) {
-          if (consumeEvent(event)) {
-            await reader.cancel();
-            notifyDone();
-            return;
-          }
-        }
-      }
-
-      // 流关闭前没有空行时，处理最后一个残留事件。
-      buffer += decoder.decode();
-      if (buffer.trim()) {
-        consumeEvent(buffer);
-      }
-      notifyDone();
-    } catch (err) {
-      if ((err as Error).name === "AbortError") {
-        notifyDone();
-        return;
-      }
-      controller.abort();
-      notifyError(err as Error);
-    } finally {
-      reader?.releaseLock();
-    }
-  })();
-
-  return controller;
+  return streamEndpoint('/api/chat/stream', payload, handlers);
 }
