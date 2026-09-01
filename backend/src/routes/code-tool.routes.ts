@@ -1,0 +1,2 @@
+import { Router } from 'express'; import { auth } from '../middleware/auth.middleware.js'; import { validate } from '../middleware/validate.middleware.js'; import { codeToolSchema } from '../schemas/code-tool.schema.js'; import * as controller from '../controllers/code-tool.controller.js';
+const router = Router(); router.use(auth); router.get('/', controller.list); router.post('/:key/run', validate(codeToolSchema), controller.run); router.post('/:key/stream', validate(codeToolSchema), controller.stream); export default router;

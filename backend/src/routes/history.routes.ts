@@ -1,0 +1,1 @@
+import { Router } from 'express'; import { auth } from '../middleware/auth.middleware.js'; import { list } from '../controllers/history.controller.js'; const router = Router(); router.use(auth); router.get('/', list); export default router;

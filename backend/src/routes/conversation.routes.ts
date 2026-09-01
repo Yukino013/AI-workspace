@@ -1,0 +1,10 @@
+import { Router } from 'express';
+import { auth } from '../middleware/auth.middleware.js';
+import { validate } from '../middleware/validate.middleware.js';
+import { createConversationSchema, messageSchema } from '../schemas/conversation.schema.js';
+import * as controller from '../controllers/conversation.controller.js';
+const router = Router(); router.use(auth);
+router.get('/', controller.list); router.post('/', validate(createConversationSchema), controller.create);
+router.get('/:id', controller.detail); router.patch('/:id', validate(createConversationSchema), controller.update); router.delete('/:id', controller.remove);
+router.post('/:id/messages', validate(messageSchema), controller.message); router.post('/:id/stream', validate(messageSchema), controller.stream);
+export default router;
