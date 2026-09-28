@@ -79,4 +79,4 @@ export interface Conversation { id: string; title: string; model: string; create
 export interface ConversationMessage { id: string; role: 'user' | 'assistant'; content: string; tokenUsage?: TokenUsage; createdAt: string; }
 export interface ConversationDetail extends Conversation { messages: ConversationMessage[]; }
 export interface CodeTool { key: string; name: string; description: string; inputHint: string; }
-export interface HistoryItem { id: string; type: 'chat' | 'code-tool'; title: string; model: string; input: string; output: string; createdAt: string; conversationId?: string; toolKey?: string; }
+export interface HistoryItem { id: string; type: 'chat' | 'code-tool'; title: string; model: string; input: string; output: string; createdAt: string; conversationId?: string; toolKey?: string; language?: string; status?: 'success' | 'error' | 'aborted'; errorMessage?: string; }

@@ -49,6 +49,7 @@ function syncScroll() {
       ref="textareaRef"
       v-model="content"
       class="textarea"
+      aria-label="Prompt 内容"
       :placeholder="placeholder"
       wrap="soft"
       spellcheck="false"

@@ -1,6 +1,15 @@
 <script setup lang="ts">
 defineProps<{
   name:
+    | "arrow-up"
+    | "arrow-up-right"
+    | "check"
+    | "close"
+    | "grid"
+    | "list"
+    | "panel"
+    | "copy"
+    | "trash"
     | "archive"
     | "book"
     | "chat"
@@ -35,7 +44,39 @@ defineProps<{
     stroke-linejoin="round"
     aria-hidden="true"
   >
-    <template v-if="name === 'archive'">
+    <template v-if="name === 'arrow-up'">
+      <path d="M12 19V5m-6 6 6-6 6 6" />
+    </template>
+    <template v-else-if="name === 'arrow-up-right'">
+      <path d="M6 18 18 6M6 6h12v12" />
+    </template>
+    <template v-else-if="name === 'check'">
+      <path d="m5 12 4 4L19 6" />
+    </template>
+    <template v-else-if="name === 'close'">
+      <path d="m6 6 12 12M6 18 18 6" />
+    </template>
+    <template v-else-if="name === 'grid'">
+      <rect x="3" y="3" width="7" height="7" rx="1.5" />
+      <rect x="14" y="3" width="7" height="7" rx="1.5" />
+      <rect x="3" y="14" width="7" height="7" rx="1.5" />
+      <rect x="14" y="14" width="7" height="7" rx="1.5" />
+    </template>
+    <template v-else-if="name === 'list'">
+      <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />
+    </template>
+    <template v-else-if="name === 'panel'">
+      <rect x="3" y="4" width="18" height="16" rx="3" />
+      <path d="M9 4v16" />
+    </template>
+    <template v-else-if="name === 'copy'">
+      <rect x="8" y="8" width="12" height="13" rx="2" />
+      <path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3" />
+    </template>
+    <template v-else-if="name === 'trash'">
+      <path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7" />
+    </template>
+    <template v-else-if="name === 'archive'">
       <rect x="3" y="4" width="18" height="5" rx="1" />
       <path d="M5 9v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9M9 13h6" />
     </template>
@@ -44,7 +85,9 @@ defineProps<{
       <path d="M4 6.5A2.5 2.5 0 0 1 6.5 9H20" />
     </template>
     <template v-else-if="name === 'chat'">
-      <path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4v8Z" />
+      <path
+        d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4v8Z"
+      />
       <path d="M8 9h8M8 13h5" />
     </template>
     <template v-else-if="name === 'chevron-right'">
@@ -62,7 +105,9 @@ defineProps<{
       <path d="M3 3v5h5M12 7v5l3 2" />
     </template>
     <template v-else-if="name === 'logout'">
-      <path d="M10 17l5-5-5-5M15 12H3M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
+      <path
+        d="M10 17l5-5-5-5M15 12H3M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"
+      />
     </template>
     <template v-else-if="name === 'moon'">
       <path d="M20.5 14.2A8.4 8.4 0 0 1 9.8 3.5 8.5 8.5 0 1 0 20.5 14.2Z" />
@@ -80,22 +125,32 @@ defineProps<{
     </template>
     <template v-else-if="name === 'settings'">
       <circle cx="12" cy="12" r="3" />
-      <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3A1.7 1.7 0 0 0 10 3V2.8h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z" />
+      <path
+        d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3A1.7 1.7 0 0 0 10 3V2.8h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z"
+      />
     </template>
     <template v-else-if="name === 'sparkles'">
-      <path d="m12 3-1.2 3.2L7.5 7.5l3.3 1.3L12 12l1.2-3.2 3.3-1.3-3.3-1.3L12 3Z" />
-      <path d="m18.5 13-.9 2.1-2.1.9 2.1.9.9 2.1.9-2.1 2.1-.9-2.1-.9-.9-2.1ZM5.5 13l-.7 1.8L3 15.5l1.8.7.7 1.8.7-1.8 1.8-.7-1.8-.7-.7-1.8Z" />
+      <path
+        d="m12 3-1.2 3.2L7.5 7.5l3.3 1.3L12 12l1.2-3.2 3.3-1.3-3.3-1.3L12 3Z"
+      />
+      <path
+        d="m18.5 13-.9 2.1-2.1.9 2.1.9.9 2.1.9-2.1 2.1-.9-2.1-.9-.9-2.1ZM5.5 13l-.7 1.8L3 15.5l1.8.7.7 1.8.7-1.8 1.8-.7-1.8-.7-.7-1.8Z"
+      />
     </template>
     <template v-else-if="name === 'sun'">
       <circle cx="12" cy="12" r="4" />
-      <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
+      <path
+        d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"
+      />
     </template>
     <template v-else-if="name === 'user'">
       <circle cx="12" cy="8" r="4" />
       <path d="M4 21a8 8 0 0 1 16 0" />
     </template>
     <template v-else-if="name === 'wand'">
-      <path d="m15 4 5 5L8 21l-5-5L15 4ZM6 13l5 5M18 2v3M22 6h-3M6 2l.8 2.2L9 5l-2.2.8L6 8l-.8-2.2L3 5l2.2-.8L6 2Z" />
+      <path
+        d="m15 4 5 5L8 21l-5-5L15 4ZM6 13l5 5M18 2v3M22 6h-3M6 2l.8 2.2L9 5l-2.2.8L6 8l-.8-2.2L3 5l2.2-.8L6 2Z"
+      />
     </template>
   </svg>
 </template>

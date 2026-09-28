@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageHeading from "@/components/common/PageHeading.vue";
 import { onMounted, ref, shallowRef } from "vue";
 import { deleteChatRecord, getChatRecords } from "@/api/chat";
 import { md } from "@/utils/markdown";
@@ -94,6 +95,7 @@ onMounted(fetchList);
 
 <template>
   <div>
+    <PageHeading eyebrow="PROMPT EXECUTIONS" title="让每次调试都有依据" description="回看 Prompt 版本、模型输出与调用状态，持续迭代你的工作流。"><el-button @click="$router.push('/history')">对话与代码工具记录</el-button></PageHeading>
     <el-table v-loading="loading" :data="list" empty-text="暂无调用记录，去工作台运行一次吧">
       <el-table-column label="调用时间" width="150">
         <template #default="{ row }">{{ formatTime(row.createdAt) }}</template>

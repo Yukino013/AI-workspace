@@ -1,4 +1,5 @@
 import { useAuthStore } from "@/stores/auth";
+import router from "@/router";
 
 export interface StreamPayload {
   promptId: string;
@@ -46,7 +47,9 @@ export function streamEndpoint(endpoint: string, payload: unknown, handlers: Str
       return false;
     };
     try {
-      const res = await fetch(endpoint, {
+      const base = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/$/, '');
+      const url = endpoint.startsWith('/api/') ? `${base}${endpoint.slice(4)}` : endpoint;
+      const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${auth.token}` },
         body: JSON.stringify(payload),
@@ -54,7 +57,14 @@ export function streamEndpoint(endpoint: string, payload: unknown, handlers: Str
       });
       if (!res.ok) {
         const body = await res.json().catch(() => null);
+        if (res.status === 401) {
+          auth.logout();
+          void router.replace({ path: '/login', query: { redirect: router.currentRoute.value.fullPath } });
+        }
         throw new Error(body?.message || `请求失败（HTTP ${res.status}）`);
+      }
+      if (!res.headers.get('content-type')?.includes('text/event-stream')) {
+        throw new Error('服务器未返回 SSE 事件流，请检查 API 地址与代理配置');
       }
       if (!res.body) throw new Error("浏览器未收到可读取的响应流");
       reader = res.body.getReader();
@@ -74,8 +84,8 @@ export function streamEndpoint(endpoint: string, payload: unknown, handlers: Str
           }
       }
       buffer += decoder.decode();
-      if (buffer.trim()) consume(buffer);
-      done();
+      if (buffer.trim() && consume(buffer)) { done(); return; }
+      throw new Error('连接意外中断，回复可能不完整，请重试');
     } catch (err) {
       if ((err as Error).name === "AbortError") done();
       else {

@@ -1,31 +1,300 @@
 <script setup lang="ts">
-import { onMounted, ref, shallowRef } from 'vue';
-import { ElMessage, ElMessageBox } from 'element-plus';
-import { createConversation, deleteConversation, getConversation, getConversations, updateConversation } from '@/api/conversation';
-import { streamEndpoint } from '@/utils/sse';
-import { MODEL_OPTIONS } from '@/utils/constants';
-import ChatMessage from '@/components/ChatMessage.vue';
-import type { Conversation, ConversationDetail, ConversationMessage } from '@/types';
-
-const conversations = ref<Conversation[]>([]); const active = ref<ConversationDetail | null>(null); const model = shallowRef<string>(MODEL_OPTIONS[0].value); const input = shallowRef(''); const loading = shallowRef(false); const streaming = shallowRef(false); const aborter = shallowRef<AbortController | null>(null);
-async function load() { conversations.value = await getConversations(); if (!active.value && conversations.value[0]) await open(conversations.value[0]); }
-async function open(item: Conversation) { loading.value = true; try { active.value = await getConversation(item.id); model.value = active.value.model; } finally { loading.value = false; } }
-async function changeModel() { if (active.value && model.value !== active.value.model) { const id = active.value.id; await updateConversation(id, model.value); active.value = await getConversation(id); } }
-async function newChat() { const item = await createConversation(model.value); conversations.value.unshift(item); await open(item); }
-async function remove(item: Conversation) { try { await ElMessageBox.confirm('删除后会话消息无法恢复，确定继续吗？', '删除会话', { type: 'warning' }); } catch { return; } await deleteConversation(item.id); if (active.value?.id === item.id) active.value = null; await load(); }
-function appendAssistant(text: string) { if (!active.value) return; const messages = active.value.messages; const last = messages[messages.length - 1]; if (last?.role === 'assistant' && last.id === 'streaming') last.content += text; else messages.push({ id: 'streaming', role: 'assistant', content: text, createdAt: new Date().toISOString() } as ConversationMessage); }
-function send() { const content = input.value.trim(); if (!content || !active.value || streaming.value) return; input.value = ''; streaming.value = true; active.value.messages.push({ id: `user-${Date.now()}`, role: 'user', content, createdAt: new Date().toISOString() }); const controller = streamEndpoint(`/api/conversations/${active.value.id}/stream`, { content }, { onChunk: appendAssistant, onDone: async () => { streaming.value = false; aborter.value = null; await open(active.value!); await load(); }, onError: (err) => { streaming.value = false; aborter.value = null; ElMessage.error(err.message); } }); aborter.value = controller; }
-function stop() { aborter.value?.abort(); aborter.value = null; streaming.value = false; }
-onMounted(load);
+import { nextTick, shallowRef, watch } from "vue";
+import { ElScrollbar } from "element-plus";
+import { useConversations } from "@/composables/useConversations";
+import ChatWelcome from "@/components/chat/ChatWelcome.vue";
+import ChatComposer from "@/components/chat/ChatComposer.vue";
+import ChatMessage from "@/components/ChatMessage.vue";
+import ConversationSidebar from "@/components/chat/ConversationSidebar.vue";
+import AppIcon from "@/components/common/AppIcon.vue";
+import LoadError from "@/components/common/LoadError.vue";
+const {
+  conversations,
+  active,
+  model,
+  input,
+  loading,
+  busy,
+  streaming,
+  error,
+  load,
+  open,
+  newChat,
+  changeModel,
+  remove,
+  send,
+  stop,
+} = useConversations();
+const showSessions = shallowRef(false);
+const composer = shallowRef<InstanceType<typeof ChatComposer>>();
+async function suggest(text: string) {
+  input.value = text;
+  await nextTick();
+  composer.value?.focus();
+}
+const scrollbar = shallowRef<InstanceType<typeof ElScrollbar>>();
+const followOutput = shallowRef(true);
+function onScroll({ scrollTop }: { scrollTop: number }) {
+  const wrap = scrollbar.value?.wrapRef;
+  if (wrap)
+    followOutput.value =
+      wrap.scrollHeight - wrap.clientHeight - scrollTop < 100;
+}
+watch(
+  () =>
+    active.value?.messages.map((message) => message.content).join("").length,
+  async () => {
+    if (!followOutput.value) return;
+    await nextTick();
+    const wrap = scrollbar.value?.wrapRef;
+    if (wrap) scrollbar.value?.setScrollTop(wrap.scrollHeight);
+  },
+);
+watch(
+  () => active.value?.id,
+  () => {
+    followOutput.value = true;
+  },
+);
+function onKeydown(event: KeyboardEvent) {
+  if (
+    event.key !== "Enter" ||
+    event.shiftKey ||
+    event.isComposing ||
+    event.keyCode === 229
+  )
+    return;
+  event.preventDefault();
+  followOutput.value = true;
+  send();
+}
 </script>
-
 <template>
-  <div class="chat-layout" v-loading="loading">
-    <aside class="sessions"><div class="sessions-head"><span>会话</span><el-button type="primary" size="small" @click="newChat">新建</el-button></div><div v-if="!conversations.length" class="empty">还没有会话</div><button v-for="item in conversations" :key="item.id" class="session-item" :class="{ active: active?.id === item.id }" @click="open(item)"><span class="session-title">{{ item.title }}</span><el-button link type="danger" @click.stop="remove(item)">删除</el-button></button></aside>
-    <main class="chat-main"><template v-if="active"><header class="chat-head"><div><h2>{{ active.title }}</h2><span>{{ active.model }}</span></div><el-select v-model="model" size="small" style="width: 180px" @change="changeModel"><el-option v-for="option in MODEL_OPTIONS" :key="option.value" v-bind="option" /></el-select></header><el-scrollbar class="messages"><ChatMessage v-for="message in active.messages" :key="message.id" :role="message.role" :content="message.content" /></el-scrollbar><div class="composer"><el-input v-model="input" type="textarea" :rows="3" resize="none" placeholder="输入消息，Enter 发送" @keydown.enter.exact.prevent="send" /><div class="composer-actions"><el-button v-if="streaming" @click="stop">停止</el-button><el-button type="primary" :loading="streaming" @click="send">发送</el-button></div></div></template><el-empty v-else description="新建一个会话开始聊天"><el-button type="primary" @click="newChat">新建会话</el-button></el-empty></main>
+  <div class="chat-page">
+    <LoadError v-if="error" :message="error" @retry="load" />
+    <header class="chat-toolbar">
+      <div class="chat-title">
+        <AppIcon name="chat" :size="18" /><span>{{
+          active
+            ? conversations.find((item) => item.id === active?.id)?.title ||
+              active.title
+            : "AI 对话"
+        }}</span>
+      </div>
+      <div class="chat-tools">
+        <button
+          class="session-toggle"
+          :class="{ selected: showSessions }"
+          :aria-expanded="showSessions"
+          aria-controls="conversation-panel"
+          @click="showSessions = !showSessions"
+        >
+          <AppIcon name="panel" :size="16" /><span>会话记录</span></button
+        ><button
+          class="icon-button"
+          aria-label="新建会话"
+          title="新建会话"
+          :disabled="busy"
+          @click="newChat"
+        >
+          <AppIcon name="plus" :size="20" />
+        </button>
+      </div>
+    </header>
+    <div class="chat-layout" :class="{ 'with-sessions': showSessions }">
+      <ConversationSidebar
+        v-if="showSessions"
+        id="conversation-panel"
+        :conversations="conversations"
+        :active-id="active?.id"
+        :busy="busy"
+        @open="open"
+        @remove="remove"
+        @create="newChat"
+      />
+      <section
+        v-loading="loading"
+        class="chat-main"
+        :class="{ 'is-empty': !active?.messages.length }"
+        aria-label="对话内容"
+      >
+        <ChatWelcome
+          v-if="!active?.messages.length"
+          :ready="!!active"
+          :busy="busy"
+          @create="newChat"
+          @suggest="suggest"
+        />
+        <el-scrollbar v-else ref="scrollbar" class="messages" @scroll="onScroll"
+          ><div class="message-column">
+            <ChatMessage
+              v-for="message in active.messages"
+              :key="message.id"
+              :role="message.role"
+              :content="message.content"
+            />
+            <div v-if="streaming" class="generating" role="status">
+              <span /> 正在思考与生成…
+            </div>
+          </div></el-scrollbar
+        >
+        <ChatComposer
+          v-if="active"
+          ref="composer"
+          v-model="input"
+          v-model:selected-model="model"
+          :streaming="streaming"
+          :disabled="busy || loading"
+          @send="
+            followOutput = true;
+            send();
+          "
+          @stop="stop"
+          @change-model="changeModel"
+          @keydown="onKeydown"
+        />
+      </section>
+    </div>
   </div>
 </template>
-
 <style scoped>
-.chat-layout { display: grid; grid-template-columns: 250px minmax(0, 1fr); height: calc(100vh - 104px); gap: 16px; }.sessions, .chat-main { min-height: 0; background: var(--app-bg); border: 1px solid var(--el-border-color-light); border-radius: 8px; }.sessions { padding: 14px 10px; overflow: auto; }.sessions-head, .chat-head { display: flex; justify-content: space-between; align-items: center; }.sessions-head { padding: 0 6px 12px; font-weight: 600; }.session-item { width: 100%; display: flex; align-items: center; justify-content: space-between; border: 0; background: transparent; padding: 10px 8px; border-radius: 6px; cursor: pointer; color: var(--app-text); text-align: left; }.session-item.active, .session-item:hover { background: var(--el-fill-color-light); }.session-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.empty { padding: 30px 8px; color: var(--app-muted); text-align: center; font-size: 13px; }.chat-main { display: flex; flex-direction: column; overflow: hidden; }.chat-head { padding: 16px 20px; border-bottom: 1px solid var(--el-border-color-light); }.chat-head h2 { margin: 0 0 4px; font-size: 16px; }.chat-head span { color: var(--app-muted); font-size: 12px; }.messages { flex: 1; padding: 20px; }.composer { padding: 14px 20px; border-top: 1px solid var(--el-border-color-light); }.composer-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; } @media (max-width: 720px) { .chat-layout { grid-template-columns: 1fr; height: auto; }.sessions { max-height: 210px; }.chat-main { min-height: 600px; } }
+.chat-page {
+  display: flex;
+  flex-direction: column;
+  height: calc(100dvh - 120px);
+  min-height: 560px;
+}
+.chat-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 15px;
+  padding: 4px 5px 18px;
+}
+.chat-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  color: var(--app-muted);
+  font-size: 12px;
+}
+.chat-title > span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  max-width: 420px;
+}
+.chat-title > .app-icon {
+  flex-shrink: 0;
+}
+.chat-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.session-toggle {
+  border: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 12px;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--app-muted);
+  font-size: 11px;
+}
+.session-toggle:hover,
+.session-toggle.selected {
+  background: var(--app-surface);
+  color: var(--el-color-primary);
+}
+.chat-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  flex: 1;
+  min-height: 0;
+  gap: 24px;
+}
+.chat-layout.with-sessions {
+  grid-template-columns: 225px minmax(0, 1fr);
+}
+.chat-main {
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 8px 18px 0;
+}
+.chat-main.is-empty {
+  justify-content: center;
+  padding-bottom: min(10vh, 90px);
+  overflow: auto;
+}
+.messages {
+  flex: 1;
+  min-height: 0;
+  margin-bottom: 20px;
+}
+.message-column {
+  max-width: 780px;
+  margin: auto;
+  padding: 20px 10px 8px;
+}
+.generating {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--app-muted);
+  margin: 20px 0;
+}
+.generating span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--el-color-primary);
+}
+@media (max-width: 1050px) {
+  .chat-layout {
+    gap: 10px;
+  }
+  .chat-layout.with-sessions {
+    grid-template-columns: 190px minmax(0, 1fr);
+  }
+  .chat-main {
+    padding-inline: 0;
+  }
+}
+@media (max-width: 760px) {
+  .chat-page {
+    height: calc(100dvh - 88px);
+    min-height: 580px;
+  }
+  .chat-layout.with-sessions {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+  .chat-main.is-empty {
+    padding-bottom: 25px;
+  }
+  .chat-toolbar {
+    padding-bottom: 12px;
+  }
+  .chat-title > span {
+    max-width: 155px;
+  }
+  .session-toggle {
+    min-height: 44px;
+  }
+  .chat-layout.with-sessions :deep(.sessions) {
+    max-height: 185px;
+  }
+  .chat-layout.with-sessions .chat-main.is-empty {
+    justify-content: flex-start;
+    padding-top: 18px;
+  }
+}
 </style>

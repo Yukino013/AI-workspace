@@ -1,7 +1,11 @@
 import { CodeToolRecord } from "../models/code-tool-record.model.js";
 import { AIService } from "./ai/ai.service.js";
 import { getApiKeyForModel } from "./provider.service.js";
-import { CODE_TOOL_PROMPTS, CODE_TOOLS, type CodeToolKey } from "../constants/code-tools.js";
+import {
+  CODE_TOOL_PROMPTS,
+  CODE_TOOLS,
+  type CodeToolKey,
+} from "../constants/code-tools.js";
 import { AppError } from "../utils/AppError.js";
 
 function getTool(key: string) {
@@ -28,15 +32,30 @@ function dto(doc: any) {
 export function listTools() {
   return CODE_TOOLS;
 }
-export async function runTool(userId: string, key: string, input: { model: string; code: string; language?: string }) {
+export async function runTool(
+  userId: string,
+  key: string,
+  input: { model: string; code: string; language?: string },
+) {
   const tool = getTool(key);
   const start = Date.now();
   const messages = [
-    { role: "system" as const, content: CODE_TOOL_PROMPTS[tool.key as CodeToolKey] },
+    {
+      role: "system" as const,
+      content:
+        CODE_TOOL_PROMPTS[tool.key as CodeToolKey] +
+        (input.language?.trim()
+          ? `\n目标编程语言：${input.language.trim()}`
+          : ""),
+    },
     { role: "user" as const, content: input.code },
   ];
   try {
-    const result = await AIService.chat({ model: input.model, messages, apiKey: await getApiKeyForModel(userId, input.model) });
+    const result = await AIService.chat({
+      model: input.model,
+      messages,
+      apiKey: await getApiKeyForModel(userId, input.model),
+    });
     const record = await CodeToolRecord.create({
       userId,
       toolKey: key,
@@ -66,17 +85,37 @@ export async function runTool(userId: string, key: string, input: { model: strin
     throw err;
   }
 }
-export async function streamTool(userId: string, key: string, input: { model: string; code: string; language?: string }, onDelta: (text: string) => void, signal: AbortSignal) {
+export async function streamTool(
+  userId: string,
+  key: string,
+  input: { model: string; code: string; language?: string },
+  onDelta: (text: string) => void,
+  signal: AbortSignal,
+) {
   const tool = getTool(key);
   const start = Date.now();
   let output = "";
   let usage;
   const messages = [
-    { role: "system" as const, content: CODE_TOOL_PROMPTS[tool.key as CodeToolKey] },
+    {
+      role: "system" as const,
+      content:
+        CODE_TOOL_PROMPTS[tool.key as CodeToolKey] +
+        (input.language?.trim()
+          ? `\n目标编程语言：${input.language.trim()}`
+          : ""),
+    },
     { role: "user" as const, content: input.code },
   ];
   try {
-    for await (const event of AIService.stream({ model: input.model, messages, apiKey: await getApiKeyForModel(userId, input.model) }, signal)) {
+    for await (const event of AIService.stream(
+      {
+        model: input.model,
+        messages,
+        apiKey: await getApiKeyForModel(userId, input.model),
+      },
+      signal,
+    )) {
       if (event.type === "delta") {
         output += event.content;
         onDelta(event.content);

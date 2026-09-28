@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import ChatMessage from '@/components/ChatMessage.vue';
+import BrandMark from "@/components/common/BrandMark.vue";
+import ChatMessage from "@/components/ChatMessage.vue";
 
 defineProps<{
   output: string;
@@ -24,9 +25,11 @@ defineProps<{
     <div class="output">
       <ChatMessage v-if="output" role="assistant" :content="output" />
       <div v-else class="empty">
-        <div class="empty-mark">AI</div>
+        <div class="empty-mark"><BrandMark :size="42" /></div>
         <p class="empty-title">等待运行</p>
-        <p class="empty-desc">在左侧填写变量后点击「运行」，AI 输出将在这里实时呈现</p>
+        <p class="empty-desc">
+          在左侧填写变量后点击「运行」，AI 输出将在这里实时呈现
+        </p>
       </div>
     </div>
   </el-card>
@@ -51,12 +54,6 @@ defineProps<{
   font-size: 15px;
   font-weight: 500;
   color: var(--app-text);
-}
-.title-text::before {
-  content: '>_ ';
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  color: var(--tech-cyan);
-  font-weight: 400;
 }
 .streaming-badge {
   display: inline-flex;
@@ -104,8 +101,8 @@ defineProps<{
   justify-content: center;
   font-size: 16px;
   font-weight: 500;
-  color: #fff;
-  background: linear-gradient(135deg, var(--tech-violet), var(--tech-cyan));
+  color: var(--el-color-primary);
+  background: var(--app-surface);
   opacity: 0.9;
   margin-bottom: 16px;
 }

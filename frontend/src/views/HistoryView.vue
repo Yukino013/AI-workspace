@@ -1,10 +1,244 @@
 <script setup lang="ts">
-import { onMounted, ref, shallowRef } from 'vue'; import { ElMessage } from 'element-plus'; import { getHistory } from '@/api/history'; import { md } from '@/utils/markdown'; import type { HistoryItem } from '@/types';
-const keyword = shallowRef(''); const type = shallowRef(''); const page = shallowRef(1); const pageSize = shallowRef(20); const total = shallowRef(0); const loading = shallowRef(false); const items = ref<HistoryItem[]>([]); const detail = ref<HistoryItem | null>(null); const visible = shallowRef(false);
-function onPageChange(value: number) { page.value = value; load(); }
-async function load() { loading.value = true; try { const data = await getHistory({ keyword: keyword.value || undefined, type: type.value || undefined, page: page.value, pageSize: pageSize.value }); items.value = data.items; total.value = data.total; } finally { loading.value = false; } }
-function search() { page.value = 1; load(); } function open(item: HistoryItem) { detail.value = item; visible.value = true; } async function copy() { if (!detail.value) return; await navigator.clipboard.writeText(detail.value.output); ElMessage.success('结果已复制'); } function format(v: string) { const d = new Date(v); return Number.isNaN(d.getTime()) ? v : d.toLocaleString(); }
+import { onBeforeUnmount, onMounted, shallowRef } from "vue";
+import { getHistory } from "@/api/history";
+import type { HistoryItem } from "@/types";
+import PageHeading from "@/components/common/PageHeading.vue";
+import LoadError from "@/components/common/LoadError.vue";
+import AppIcon from "@/components/common/AppIcon.vue";
+import HistoryDetail from "@/components/history/HistoryDetail.vue";
+const keyword = shallowRef("");
+const type = shallowRef("");
+const page = shallowRef(1);
+const pageSize = 20;
+const total = shallowRef(0);
+const loading = shallowRef(false);
+const error = shallowRef("");
+const items = shallowRef<HistoryItem[]>([]);
+const detail = shallowRef<HistoryItem | null>(null);
+const visible = shallowRef(false);
+let requestId = 0;
+async function load() {
+  const current = ++requestId;
+  loading.value = true;
+  error.value = "";
+  try {
+    const result = await getHistory({
+      keyword: keyword.value.trim() || undefined,
+      type: type.value || undefined,
+      page: page.value,
+      pageSize,
+    });
+    if (current !== requestId) return;
+    items.value = result.items;
+    total.value = result.total;
+  } catch {
+    if (current === requestId) error.value = "历史记录加载失败，请稍后重试。";
+  } finally {
+    if (current === requestId) loading.value = false;
+  }
+}
+function search() {
+  page.value = 1;
+  load();
+}
+function onPageChange(value: number) {
+  page.value = value;
+  load();
+}
+function open(item: HistoryItem) {
+  detail.value = item;
+  visible.value = true;
+}
 onMounted(load);
+onBeforeUnmount(() => {
+  ++requestId;
+});
 </script>
-<template><div class="history-page"><div class="toolbar"><div><h2>历史记录</h2><span>对话与代码工具结果统一检索</span></div><div class="filters"><el-input v-model="keyword" clearable placeholder="搜索标题、输入或输出" @keyup.enter="search" @clear="search" /><el-select v-model="type" clearable placeholder="全部来源" @change="search"><el-option label="AI 对话" value="chat" /><el-option label="代码工具" value="code-tool" /></el-select><el-button type="primary" @click="search">搜索</el-button></div></div><el-table v-loading="loading" :data="items" empty-text="暂无历史记录"><el-table-column label="来源" width="110"><template #default="{ row }"><el-tag :type="row.type === 'chat' ? 'info' : 'success'">{{ row.type === 'chat' ? 'AI 对话' : '代码工具' }}</el-tag></template></el-table-column><el-table-column prop="title" label="标题" min-width="230" show-overflow-tooltip /><el-table-column prop="model" label="模型" width="180" /><el-table-column label="时间" width="180"><template #default="{ row }">{{ format(row.createdAt) }}</template></el-table-column><el-table-column label="操作" width="90" align="right"><template #default="{ row }"><el-button link type="primary" @click="open(row)">查看</el-button></template></el-table-column></el-table><el-pagination v-if="total > pageSize" class="pagination" layout="prev, pager, next, total" :total="total" :page-size="pageSize" :current-page="page" @current-change="onPageChange" /><el-dialog v-model="visible" title="历史详情" width="760"><template v-if="detail"><el-descriptions :column="2" border size="small"><el-descriptions-item label="来源">{{ detail.type === 'chat' ? 'AI 对话' : '代码工具' }}</el-descriptions-item><el-descriptions-item label="模型">{{ detail.model }}</el-descriptions-item><el-descriptions-item label="标题" :span="2">{{ detail.title }}</el-descriptions-item></el-descriptions><h4>输入</h4><pre class="content">{{ detail.input || '-' }}</pre><div class="result-head"><h4>输出</h4><el-button link type="primary" @click="copy">复制结果</el-button></div><div class="content markdown-body" v-html="md.render(detail.output || '')"></div></template></el-dialog></div></template>
-<style scoped>.history-page { padding: 24px 16px; }.toolbar { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; margin-bottom: 18px; }.toolbar h2 { margin: 0 0 5px; }.toolbar span { color: var(--app-muted); font-size: 13px; }.filters { display: flex; gap: 10px; }.filters .el-input { width: 250px; }.filters .el-select { width: 140px; }.pagination { margin-top: 16px; justify-content: flex-end; }h4 { margin: 18px 0 8px; }.content { max-height: 260px; overflow: auto; padding: 12px; margin: 0; white-space: pre-wrap; word-break: break-word; background: var(--el-fill-color-lighter); border-radius: 6px; }.result-head { display: flex; justify-content: space-between; align-items: center; } @media (max-width: 800px) { .toolbar { align-items: stretch; flex-direction: column; }.filters { flex-wrap: wrap; }.filters .el-input { width: 100%; } }</style>
+<template>
+  <div>
+    <PageHeading
+      eyebrow="YOUR ACTIVITY"
+      title="每一次探索，都有迹可循"
+      description="统一检索 AI 对话与代码处理结果，继续创作，无需从头开始。"
+      ><el-button @click="$router.push('/call-records')"
+        >查看 Prompt 调用记录</el-button
+      ></PageHeading
+    >
+    <section class="history-panel">
+      <form class="filters" @submit.prevent="search">
+        <span class="record-count"
+          >全部记录 <small>{{ total }}</small></span
+        ><el-input
+          v-model="keyword"
+          aria-label="搜索历史记录"
+          placeholder="搜索标题、输入或输出…"
+          clearable
+          @clear="search"
+          ><template #prefix
+            ><AppIcon name="search" :size="16" /></template></el-input
+        ><el-select
+          v-model="type"
+          aria-label="记录来源"
+          placeholder="全部来源"
+          clearable
+          @change="search"
+          ><el-option label="AI 对话" value="chat" /><el-option
+            label="代码工具"
+            value="code-tool" /></el-select
+        ><el-button type="primary" native-type="submit" :loading="loading"
+          >搜索</el-button
+        >
+      </form>
+      <LoadError v-if="error" :message="error" @retry="load" /><el-table
+        v-loading="loading"
+        :data="items"
+        @row-click="open"
+        ><el-table-column label="来源" width="120"
+          ><template #default="{ row }"
+            ><el-tag
+              :type="row.type === 'chat' ? 'info' : 'success'"
+              effect="plain"
+              size="small"
+              >{{ row.type === "chat" ? "AI 对话" : "代码工具" }}</el-tag
+            ></template
+          ></el-table-column
+        ><el-table-column label="标题" min-width="230"
+          ><template #default="{ row }"
+            ><button class="record-title" @click.stop="open(row)">
+              {{ row.title }}
+            </button>
+            <div class="record-preview">
+              {{ row.input || "暂无输入" }}
+            </div></template
+          ></el-table-column
+        ><el-table-column
+          prop="model"
+          label="模型"
+          min-width="150" /><el-table-column label="状态" width="100"
+          ><template #default="{ row }"
+            ><el-tag v-if="row.status === 'error'" size="small" type="danger"
+              >失败</el-tag
+            ><el-tag
+              v-else-if="row.status === 'aborted'"
+              size="small"
+              type="warning"
+              >已停止</el-tag
+            ><span v-else>{{
+              row.output ? "已完成" : "待回复"
+            }}</span></template
+          ></el-table-column
+        ><el-table-column label="时间" min-width="175"
+          ><template #default="{ row }">{{
+            new Date(row.createdAt).toLocaleString()
+          }}</template></el-table-column
+        ><el-table-column label="操作" width="80" fixed="right"
+          ><template #default="{ row }"
+            ><el-button link type="primary" @click.stop="open(row)"
+              >详情</el-button
+            ></template
+          ></el-table-column
+        ><template #empty
+          ><el-empty
+            :description="
+              keyword || type
+                ? '未找到匹配记录，试试其他筛选条件'
+                : '还没有记录，开始对话或运行代码工具吧'
+            "
+            :image-size="85" /></template></el-table
+      ><el-pagination
+        v-if="total > pageSize"
+        :current-page="page"
+        :total="total"
+        :page-size="pageSize"
+        layout="prev, pager, next, total"
+        @current-change="onPageChange"
+      />
+    </section>
+    <HistoryDetail v-model="visible" :item="detail" />
+  </div>
+</template>
+<style scoped>
+.history-panel {
+  border: 1px solid var(--el-border-color-light);
+  background: var(--app-bg);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.filters {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 22px;
+}
+.record-count {
+  margin-right: auto;
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 600;
+}
+.record-count small {
+  margin-left: 8px;
+  color: var(--app-muted);
+  font-weight: 400;
+}
+.filters .el-input {
+  width: 270px;
+}
+.filters .el-select {
+  width: 130px;
+}
+.record-title {
+  border: 0;
+  background: none;
+  color: var(--app-text);
+  padding: 0;
+  font-size: 13px;
+  font-weight: 550;
+  text-align: left;
+}
+.record-preview {
+  font-size: 11px;
+  color: var(--app-muted);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  margin-top: 4px;
+}
+.record-title:hover {
+  color: var(--el-color-primary);
+}
+.el-pagination {
+  padding: 18px;
+  justify-content: flex-end;
+}
+.history-panel :deep(.el-table__row) {
+  cursor: pointer;
+}
+.history-panel :deep(.el-table__cell:first-child) {
+  padding-left: 14px;
+}
+@media (max-width: 1100px) {
+  .filters {
+    flex-wrap: wrap;
+  }
+  .record-count {
+    flex-basis: 100%;
+  }
+  .filters .el-input {
+    flex: 1;
+    min-width: 100px;
+  }
+}
+@media (max-width: 500px) {
+  .filters {
+    padding: 16px;
+    gap: 8px;
+  }
+  .filters .el-input {
+    flex-basis: 100%;
+  }
+  .filters .el-select {
+    flex: 1;
+  }
+}
+</style>

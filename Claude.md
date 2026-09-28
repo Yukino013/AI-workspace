@@ -7,7 +7,7 @@
 
 ## 开发状态与约定
 
-**当前状态**：主链路闭环已完成——后端 Day 1–6（注册/登录 + Prompt CRUD + 版本 + 调用历史 + AI Adapter/DeepSeek/Qwen + SSE 流式），前端 Prompt 工作台已从内存 mock 切换到真实后端。剩余 Day 8–10（Provider / AI 对话 / 代码工具 / 统一历史记录）待实现。本文档既是开发设计文档，也是本项目的 CLAUDE.md，后续开发一律以本文档为准。
+**当前状态**：核心功能链路已完成——后端已实现注册/登录、Prompt CRUD、版本与调用历史、AI Adapter（DeepSeek/Qwen/Anthropic）、SSE 流式输出，以及 Day 8–10 的 Provider 配置、AI 对话、代码工具和统一历史记录；前端对应页面也已接入真实后端。当前 Provider 范围是内置三家模型和用户自定义 API Key，部署、自动化测试、Lint/格式化及动态 Provider 扩展仍待完成。本文档既是开发设计文档，也是本项目的 CLAUDE.md，后续开发一律以本文档为准。
 
 **前端约定**：
 
@@ -44,7 +44,7 @@
 | 后端基础工程               | 已完成   | `backend/src/app.ts`、`backend/src/server.ts`，已包含 Express、MongoDB 连接、健康检查、统一错误处理入口                                  | 后续路由继续挂到`/api/*`                                      |
 | 用户注册 / 登录 / 当前用户 | 已完成   | `backend/src/routes/auth.routes.ts`、`backend/src/services/auth.service.ts`，已接入 bcrypt、JWT、Zod                                     | 补充接口测试和 token 过期场景验证                             |
 | 前端基础工程               | 已完成   | `frontend/src/main.ts`、`frontend/src/router/index.ts`、`frontend/src/api/http.ts`，已接入 Vue Router、Pinia、Element Plus、Axios 拦截器 | 补充路由与 401 行为测试                                       |
-| 前端 Prompt 页面骨架       | 已完成   | `PromptList.vue`、`PromptWorkspace.vue`、`PromptEditor.vue`、`VariableForm.vue`、`ModelSelector.vue` 已接通后端 API                      | 与 Provider 动态模型联动（Day 8）                             |
+| 前端 Prompt 页面骨架       | 已完成   | `PromptList.vue`、`PromptWorkspace.vue`、`PromptEditor.vue`、`VariableForm.vue`、`ModelSelector.vue` 已接通后端 API                      | 与 Provider 动态模型联动（后续增强）                         |
 | 前端 SSE 消费工具          | 已完成   | `frontend/src/utils/sse.ts` 实现 `fetch + ReadableStream + AbortController`，并处理流中 `error` 事件                                     | 供 AI 对话、代码工具复用流式消费                              |
 | Prompt 后端 CRUD           | 已完成   | `backend/src/routes/prompt.routes.ts`、`services/prompt.service.ts`，带 userId 资源隔离、分页与关键词搜索                                | 补接口测试                                                    |
 | Prompt 版本管理            | 已完成   | `backend/src/models/prompt-version.model.ts`，内容变化自动生成新版本，支持恢复                                                           | 补版本对比视图（可选）                                        |
@@ -53,10 +53,10 @@
 | SSE 后端流式转发           | 已完成   | `backend/src/services/chat.service.ts` 的 `streamChat`，转发 chunk、落库、客户端断开 abort、流中回传错误事件                             | 与真实 Key 联调中断/完成事件                                  |
 | Qwen / 第二模型            | 已完成   | `backend/src/services/ai/qwen.adapter.ts`，与 DeepSeek 共用 OpenAI 兼容客户端，`AIService` 统一按模型注册                                | 填`QWEN_API_KEY` 后验证                                       |
 | Anthropic / 第三模型        | 已完成   | `backend/src/services/ai/anthropic.adapter.ts`，原生 Messages API（`x-api-key` + `system` 顶层字段 + 事件式 SSE），`AIService` 统一注册       | 填`ANTHROPIC_API_KEY` 后联调，模型 ID 可在 `ai.service.ts` 常量调整 |
-| Provider 配置              | 未开始   | 文档已规划，前后端暂无代码                                                                                                               | Day 8 完成 CRUD、API Key 脱敏、连通性测试                     |
-| AI 对话                    | 未开始   | 文档已规划，前后端暂无代码                                                                                                               | Day 8 完成会话、消息、多轮上下文、流式输出                    |
-| 代码工具                   | 未开始   | 文档已规划，前后端暂无代码                                                                                                               | Day 9 完成场景常量、run/stream、结果落库                      |
-| 统一历史记录               | 未开始   | 文档已规划，前后端暂无代码                                                                                                               | Day 10 聚合对话与代码工具记录，支持搜索和复用                 |
+| Provider 配置              | 已完成（基础版） | `provider.routes.ts`、`provider.service.ts`、`ProviderSettings.vue` 已支持内置 Provider、用户 API Key 保存与脱敏 | 补充自定义 Provider CRUD、动态模型列表、连通性测试（后续增强） |
+| AI 对话                    | 已完成   | `conversation.routes.ts`、`conversation.service.ts`、`ChatView.vue` 已支持会话、消息、多轮上下文与 SSE 流式输出                       | 补接口测试与异常场景验证                                      |
+| 代码工具                   | 已完成   | `code-tool.routes.ts`、`code-tool.service.ts`、`CodeToolView.vue` 已支持固定场景、run/stream 与结果落库                             | 补接口测试与结果复用                                          |
+| 统一历史记录               | 已完成   | `history.routes.ts`、`history.service.ts`、`HistoryView.vue` 已支持对话/代码工具聚合、搜索、来源筛选、继续对话、再次运行、复制输入/结果和导出 Markdown | 补自动化测试与更细粒度的历史详情                              |
 | 部署                       | 未开始   | 文档有 Docker / Nginx 方案，仓库暂无 Dockerfile / compose                                                                                | Day 7 后补齐并跑通                                            |
 | 测试 / Lint / 格式化       | 未开始   | 当前`package.json` 只有 dev/build/start/typecheck                                                                                        | 补 Vitest / Supertest / ESLint / Prettier，再把命令加入质量门 |
 
@@ -66,7 +66,9 @@
 2. ~~接入 AIService + DeepSeekAdapter，跑通非流式 `/api/chat`~~ ✅
 3. ~~完成 `/api/chat/stream`，验证前端 `sse.ts` 流式链路~~ ✅
 4. ~~Prompt 版本和调用历史~~ ✅（第一个闭环 MVP 已跑通）
-5. 下一步：扩展 Provider、AI 对话、代码工具、统一历史记录（Day 8–10）。
+5. ~~扩展 Provider、AI 对话、代码工具、统一历史记录（Day 8–10）~~ ✅（基础版已完成）。
+6. ~~补齐结果复用闭环（继续对话、再次运行、复制、Markdown 导出）~~ ✅。
+7. 下一步：修复依赖环境并补齐自动化测试，完成真实 API/MongoDB 联调，再推进部署与 Provider 动态扩展。
 
 ## 0.3 文档维护规则
 
@@ -495,26 +497,20 @@ ChatRecord
 - Token 使用量
 - 请求是否成功
 
-## 6.5 AIProvider（API/模型配置，② AI 对话）
+## 6.5 Provider 配置（API Key，② AI 对话）
 
 ```text
-AIProvider
-├── _id
-├── userId              # 索引（按用户查询）
-├── name                # 显示名，如"我的 DeepSeek"
-├── type                # 'deepseek' | 'qwen' | 'openai' | 'custom'
-├── apiKey              # 后端存储，前端不回显完整 Key
-├── baseUrl             # API 地址
-├── models              # 模型名数组，如 ['deepseek-chat']
-├── isActive            # 是否启用
-├── createdAt
-└── updatedAt
+User（Provider 字段）
+├── deepseekApiKey      # select: false，仅后端读取
+├── qwenApiKey          # select: false，仅后端读取
+└── anthropicApiKey     # select: false，仅后端读取
 ```
 
 说明：
 
-- 每个用户可配置多个 Provider，自行填入 API Key / Base URL / 模型列表
+- 当前版本提供 DeepSeek / Qwen / Anthropic 三个内置 Provider；用户可分别保存自己的 API Key
 - API Key 只存在后端数据库，**绝不下发完整 Key 给前端**（回显时脱敏）
+- 自定义 Provider、Base URL 和动态模型列表属于后续增强范围
 
 ## 6.6 ChatSession（对话会话，② AI 对话）
 
@@ -523,7 +519,6 @@ ChatSession
 ├── _id
 ├── userId              # 索引
 ├── title               # 会话标题（取首条用户消息前 N 字）
-├── providerId          # 使用的 API 配置
 ├── model               # 使用的模型
 ├── createdAt
 └── updatedAt
@@ -549,7 +544,6 @@ CodeToolRecord
 ├── userId              # 索引
 ├── toolKey             # 'explain' | 'translate' | 'refactor' | 'review' | 'test'
 ├── title               # 列表展示，如"重构 user.service.ts"
-├── providerId
 ├── model
 ├── input               # 输入的代码
 ├── output              # AI 结果
@@ -567,7 +561,6 @@ User:            username（唯一）
 Prompt:          { userId: 1, updatedAt: -1 }
 PromptVersion:   { promptId: 1, version: -1 }
 ChatRecord:      { userId: 1, createdAt: -1 }
-AIProvider:      { userId: 1 }
 ChatSession:     { userId: 1, updatedAt: -1 }
 ChatMessage:     { sessionId: 1, createdAt: 1 }
 CodeToolRecord:  { userId: 1, createdAt: -1 }
@@ -1195,12 +1188,12 @@ AI输出
 
 ## 7.9 AI 对话
 
-**定位**：统一聊天入口，支持配置多个 API/模型，多轮对话（携带上下文）。
+**定位**：统一聊天入口，支持选择内置 Provider/模型，多轮对话（携带上下文）；用户可为内置 Provider 保存自己的 API Key。
 
 实现：
 
 ```text
-Provider 管理（配置多个 API/模型）
+Provider 管理（配置内置 Provider 的用户 API Key）
 对话会话（新建 / 列表 / 删除）
 多轮消息（携带历史上下文）
 流式输出（复用 7.5 SSE）
@@ -1208,8 +1201,8 @@ Provider 管理（配置多个 API/模型）
 
 关键实现：
 
-- **多 Provider 配置**：用户在 Provider 配置页维护多个 API（DeepSeek / Qwen / OpenAI / 自定义），每个含 API Key、Base URL、模型列表
-- **模型来自配置**：模型下拉不再写死，而是从启用的 Provider 里动态读取；模型用 `providerId + model` 唯一定位
+- **Provider 配置**：用户在 Provider 配置页维护内置的 DeepSeek / Qwen / Anthropic API Key
+- **模型选择**：当前前端使用内置模型常量；动态模型列表和 `providerId + model` 唯一定位属于后续增强
 - **多轮上下文**：发消息时把该会话历史 `messages`（user / assistant）一起传给 AI，实现连续对话
 - **会话标题**：新建会话后，用首条用户消息前 20 字自动生成标题
 
@@ -1217,10 +1210,7 @@ Provider 管理（配置多个 API/模型）
 
 ```http
 GET    /api/providers
-POST   /api/providers
-PUT    /api/providers/:id
-DELETE /api/providers/:id
-POST   /api/providers/:id/test        # 连通性测试（可选）
+PATCH  /api/providers                 # 批量更新一个或多个内置 Provider 的用户 API Key
 
 GET    /api/conversations
 POST   /api/conversations
@@ -1300,7 +1290,7 @@ POST /api/code-tools/:key/stream        # SSE 流式执行
  ↓
 查看输入 / 输出
  ↓
-复用（继续对话 / 复制结果 / 再次运行）
+复用与带走（继续对话 / 再次运行 / 复制输入或结果 / 导出 Markdown）
 ```
 
 接口：
@@ -1312,7 +1302,7 @@ GET /api/history?keyword=&type=chat|code-tool&page=1&pageSize=20
 说明：
 
 - `type=chat` 返回会话列表（含最后一条消息摘要），`type=code-tool` 返回工具记录，缺省返回全部
-- 复用方式：对话可直接进入继续聊；代码工具结果可一键复制或「再次运行」
+- 复用方式：对话可直接进入继续聊；代码工具结果可「再次运行」；输入和输出都支持复制，详情可导出为 Markdown 文件
 - 与 7.8 调用历史（Prompt 运行记录）**并列独立**，互不包含
 
 ---
@@ -1440,11 +1430,8 @@ GET /api/chat-records/:id
 ## Provider（② AI 对话，全部 🔒）
 
 ```http
-GET    /api/providers                     # 列表（apiKey 脱敏）
-POST   /api/providers                     # 新增配置
-PUT    /api/providers/:id                 # 编辑
-DELETE /api/providers/:id                 # 删除
-POST   /api/providers/:id/test            # 连通性测试（可选）
+GET    /api/providers                     # 列表（API Key 脱敏）
+PATCH  /api/providers                     # 批量更新一个或多个内置 Provider 的用户 API Key
 ```
 
 ## Conversation（② AI 对话，全部 🔒）
@@ -1996,9 +1983,9 @@ AI API
 
 **Provider 配置说明**：
 
-- `.env` 里的 `DEEPSEEK_*` / `QWEN_*` 作为**内置默认 Provider**，开机即用（对应 Prompt 工作台与各模块的默认模型）
-- 用户在 ② AI 对话中**自定义的 Provider**，其 API Key 存 MongoDB 的 `AIProvider` 集合，而非 `.env`
-- 自定义 Provider 的 API Key 同样只存后端，接口返回时脱敏
+- `.env` 里的 `DEEPSEEK_*` / `QWEN_*` / `ANTHROPIC_*` 作为**内置默认 Provider**，开机即用（对应 Prompt 工作台与各模块的默认模型）
+- 用户在 ② AI 对话中填写的内置 Provider API Key 存在 MongoDB `User` 集合的专用字段，而非 `.env`
+- 用户 API Key 只存后端，接口返回时脱敏；服务端 `.env` Key 作为无用户配置时的默认值
 
 ---
 
@@ -2133,8 +2120,8 @@ ChatRecord
 完成：
 
 ```text
-AIProvider 模型
-Provider 管理 API（CRUD + 脱敏）
+Provider 配置字段（User）
+Provider 管理 API（读取 + 更新 + 脱敏）
 Conversation 模型（会话 / 消息）
 多轮对话（携带历史上下文）
 SSE 流式对话（复用 7.5 思路）
@@ -2221,7 +2208,7 @@ AI 流式输出
 **② AI 对话**：
 
 ```text
-配置一个自定义 Provider（含 API Key / 模型）
+为一个内置 Provider 配置用户 API Key
  ↓
 新建会话
  ↓
@@ -2231,7 +2218,7 @@ SSE 流式返回
  ↓
 继续追问（验证多轮上下文）
  ↓
-切换 Provider / 模型
+切换内置 Provider / 模型
  ↓
 会话保存，可再次进入继续聊
 ```

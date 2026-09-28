@@ -1,7 +1,7 @@
-import type { NextFunction, Request, Response } from 'express';
-import jwt from 'jsonwebtoken';
-import { config } from '../config/index.js';
-import { fail } from '../utils/response.js';
+import type { NextFunction, Request, Response } from "express";
+import jwt from "jsonwebtoken";
+import { config } from "../config/index.js";
+import { fail } from "../utils/response.js";
 
 /** JWT 结构见 7.1：{ userId, username } */
 interface JwtPayload {
@@ -14,9 +14,9 @@ interface JwtPayload {
  * 挂在需要登录的接口前。见设计文档 11.2
  */
 export function auth(req: Request, res: Response, next: NextFunction) {
-  const token = req.headers.authorization?.replace('Bearer ', '');
+  const token = req.headers.authorization?.replace("Bearer ", "");
   if (!token) {
-    return res.status(401).json(fail(40101, '未登录'));
+    return res.status(401).json(fail(40101, "未登录"));
   }
 
   try {
@@ -24,6 +24,6 @@ export function auth(req: Request, res: Response, next: NextFunction) {
     req.user = { userId: payload.userId, username: payload.username };
     next();
   } catch {
-    return res.status(401).json(fail(40101, 'token 无效或已过期'));
+    return res.status(401).json(fail(40101, "token 无效或已过期"));
   }
 }

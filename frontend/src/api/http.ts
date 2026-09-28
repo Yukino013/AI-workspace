@@ -38,7 +38,7 @@ http.interceptors.response.use(
   },
   (err) => {
     const body = err.response?.data as ApiResponse | undefined;
-    if (body?.code === 40101) {
+    if (err.response?.status === 401 || body?.code === 40101) {
       useAuthStore().logout();
       router.push({
         path: "/login",
