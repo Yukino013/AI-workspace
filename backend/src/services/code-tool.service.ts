@@ -89,7 +89,7 @@ export async function streamTool(
   userId: string,
   key: string,
   input: { model: string; code: string; language?: string },
-  onDelta: (text: string) => void,
+  onEvent: (event: { type: "reasoning" | "delta"; content: string }) => void,
   signal: AbortSignal,
 ) {
   const tool = getTool(key);
@@ -118,8 +118,12 @@ export async function streamTool(
     )) {
       if (event.type === "delta") {
         output += event.content;
-        onDelta(event.content);
-      } else usage = event.usage;
+        onEvent(event);
+      } else if (event.type === "reasoning") {
+        onEvent(event);
+      } else if (event.type === "done") {
+        usage = event.usage;
+      }
     }
     await CodeToolRecord.create({
       userId,

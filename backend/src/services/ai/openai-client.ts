@@ -24,8 +24,16 @@ export interface ChatResult {
   usage: TokenUsage;
 }
 
-/** 流式事件：增量内容或结束（携带用量） */
-export type StreamEvent = { type: "delta"; content: string } | { type: "done"; usage: TokenUsage };
+/**
+ * 流式事件：公开推理摘要、增量内容或结束（携带用量）。
+ *
+ * reasoning 只承载 provider 明确返回的公开字段（例如 DeepSeek 的
+ * reasoning_content），不代表服务端自行推断或伪造模型隐藏思维链。
+ */
+export type StreamEvent =
+  | { type: "reasoning"; content: string }
+  | { type: "delta"; content: string }
+  | { type: "done"; usage: TokenUsage };
 
 export interface AIAdapter {
   chat(params: ChatParams): Promise<ChatResult>;
@@ -75,7 +83,13 @@ export function getSseData(event: string): string | null {
 }
 
 interface UpstreamStreamPayload {
-  choices?: Array<{ delta?: { content?: string } }>;
+  choices?: Array<{
+    delta?: {
+      content?: string;
+      reasoning_content?: string;
+      reasoning?: string;
+    };
+  }>;
   usage?: { prompt_tokens?: unknown; completion_tokens?: unknown; total_tokens?: unknown };
 }
 
@@ -159,9 +173,14 @@ export function createOpenAIAdapter(name: string, cfg: AdapterConfig): AIAdapter
       if (!json) return [];
 
       const events: StreamEvent[] = [];
-      const delta = json.choices?.[0]?.delta?.content ?? "";
-      if (delta) {
-        events.push({ type: "delta", content: delta });
+      const delta = json.choices?.[0]?.delta;
+      const reasoning = delta?.reasoning_content ?? delta?.reasoning ?? "";
+      const content = delta?.content ?? "";
+      if (reasoning) {
+        events.push({ type: "reasoning", content: reasoning });
+      }
+      if (content) {
+        events.push({ type: "delta", content });
       }
       if (json.usage) {
         usage = mapUsage(json.usage);

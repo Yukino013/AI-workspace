@@ -153,7 +153,12 @@ export function createAnthropicAdapter(name: string, cfg: AdapterConfig): AIAdap
       const data = getSseData(event);
       if (data === null) return [];
 
-      let json: { type?: string; delta?: { type?: string; text?: string }; usage?: unknown; message?: { usage?: unknown } };
+      let json: {
+        type?: string;
+        delta?: { type?: string; text?: string; thinking?: string };
+        usage?: unknown;
+        message?: { usage?: unknown };
+      };
       try {
         json = JSON.parse(data) as typeof json;
       } catch {
@@ -168,7 +173,9 @@ export function createAnthropicAdapter(name: string, cfg: AdapterConfig): AIAdap
           break;
         }
         case 'content_block_delta':
-          if (json.delta?.type === 'text_delta' && json.delta.text) {
+          if (json.delta?.type === 'thinking_delta' && json.delta.thinking) {
+            events.push({ type: 'reasoning', content: json.delta.thinking });
+          } else if (json.delta?.type === 'text_delta' && json.delta.text) {
             events.push({ type: 'delta', content: json.delta.text });
           }
           break;

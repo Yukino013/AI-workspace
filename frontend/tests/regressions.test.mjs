@@ -56,6 +56,7 @@ const { streamEndpoint } = await loadModule("../src/utils/sse.ts", {
 const { historyMarkdown, safeFileName } = await loadModule(
   "../src/utils/history-export.ts",
 );
+const { codeToolMarkdown } = await loadModule("../src/utils/code-tool-export.ts");
 const originalFetch = globalThis.fetch;
 const delta = (text) =>
   `data: ${JSON.stringify({ choices: [{ delta: { content: text } }] })}\r\n\r\n`;
@@ -90,6 +91,22 @@ function consume() {
     );
   });
 }
+function consumeWithReasoning() {
+  return new Promise((resolve) => {
+    const chunks = [];
+    const reasoning = [];
+    streamEndpoint(
+      "/api/test/stream",
+      { code: "test" },
+      {
+        onChunk: (text) => chunks.push(text),
+        onReasoning: (text) => reasoning.push(text),
+        onDone: () => resolve({ output: chunks.join(""), reasoning: reasoning.join(""), done: true }),
+        onError: (error) => resolve({ output: chunks.join(""), reasoning: reasoning.join(""), error }),
+      },
+    );
+  });
+}
 await test("SSE: fragmented UTF-8, CRLF and heartbeats preserve Chinese output", async () => {
   globalThis.fetch = async (url, init) => {
     assert.equal(url, "https://api.example.test/custom/test/stream");
@@ -107,6 +124,40 @@ await test("SSE: fragmented UTF-8, CRLF and heartbeats preserve Chinese output",
 await test("SSE: DONE without a trailing delimiter still completes", async () => {
   globalThis.fetch = async () => response(delta("ok") + "data: [DONE]");
   assert.deepEqual(await consume(), { output: "ok", done: true });
+});
+await test("SSE: public reasoning is delivered separately from final output", async () => {
+  globalThis.fetch = async () =>
+    response(
+      "data: " +
+        JSON.stringify({ choices: [{ delta: { reasoning_content: "先分析接口。" } }] }) +
+        "\n\n" +
+        delta("const answer = 42;") +
+        "data: [DONE]\n\n",
+    );
+  assert.deepEqual(await consumeWithReasoning(), {
+    output: "const answer = 42;",
+    reasoning: "先分析接口。",
+    done: true,
+  });
+});
+await test("SSE: reasoning and content in one chunk are both preserved", async () => {
+  globalThis.fetch = async () =>
+    response(
+      "data: " +
+        JSON.stringify({
+          choices: [{ delta: { reasoning: "检查边界条件。", content: "return value;" } }],
+        }) +
+        "\n\ndata: [DONE]\n\n",
+    );
+  assert.deepEqual(await consumeWithReasoning(), {
+    output: "return value;",
+    reasoning: "检查边界条件。",
+    done: true,
+  });
+});
+await test("SSE: old content-only events remain compatible without reasoning handler", async () => {
+  globalThis.fetch = async () => response(delta("legacy output") + "data: [DONE]\n\n");
+  assert.deepEqual(await consume(), { output: "legacy output", done: true });
 });
 await test("SSE: truncated stream reports failure instead of false success", async () => {
   globalThis.fetch = async () => response(delta("partial"));
@@ -174,6 +225,31 @@ const record = {
   output: "## 建议\n保持清晰。",
   createdAt: "2026-09-28T12:00:00Z",
 };
+const report = {
+  ...record, language: "TypeScript", reasoning: "分析接口\n```js\n示例\n```",
+  running: false, stopped: false, error: "",
+};
+await test("Code report: preserves source, model, result and literal public reasoning", () => {
+  const markdown = codeToolMarkdown(report);
+  assert.ok(markdown.includes("- 模型：test"));
+  assert.ok(markdown.includes("const x = 1;"));
+  assert.ok(markdown.includes("## 建议\n保持清晰。"));
+  assert.ok(markdown.includes("目标语言：TypeScript"));
+  assert.ok(markdown.includes("\n````\n" + report.reasoning + "\n````\n"));
+  assert.ok(markdown.includes("生成完成"));
+});
+await test("Code report: running, stopped and failed reports never claim success", () => {
+  for (const state of [{ running: true }, { stopped: true }, { error: "服务中断" }]) {
+    const markdown = codeToolMarkdown({ ...report, ...state });
+    assert.ok(markdown.includes("内容可能不完整"));
+    assert.ok(!markdown.includes("生成完成"));
+  }
+  assert.ok(codeToolMarkdown({ ...report, error: "服务中断" }).includes("服务中断"));
+});
+await test("Code report: content-only responses do not fabricate reasoning", () => {
+  const markdown = codeToolMarkdown({ ...report, reasoning: "" });
+  assert.ok(!markdown.includes("## 公开推理摘要"));
+});
 await test("Markdown: uses real newlines instead of escaped newline text", () => {
   const markdown = historyMarkdown(record);
   assert.ok(markdown.includes("\n\n## 输入\n\n"));

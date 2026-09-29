@@ -78,7 +78,7 @@ export async function streamMessage(userId: string, id: string, content: string,
     if (event.type === "delta") {
       output += event.content;
       onDelta(event.content);
-    } else usage = event.usage;
+    } else if (event.type === "done") usage = event.usage;
   }
   if (!signal.aborted) {
     await ChatMessage.create({ sessionId: session._id, role: "assistant", content: output, tokenUsage: usage });

@@ -4,6 +4,7 @@ import { streamEndpoint } from "@/utils/sse";
 /** A generation belongs to one mounted view; cancelled callbacks must never mutate a later run. */
 export function useGeneration() {
   const output = shallowRef("");
+  const reasoning = shallowRef("");
   const running = shallowRef(false);
   const error = shallowRef("");
   const stopped = shallowRef(false);
@@ -22,12 +23,16 @@ export function useGeneration() {
     stop();
     const current = generation;
     output.value = "";
+    reasoning.value = "";
     error.value = "";
     stopped.value = false;
     running.value = true;
     controller = streamEndpoint(endpoint, payload, {
       onChunk(text) {
         if (current === generation) output.value += text;
+      },
+      onReasoning(text) {
+        if (current === generation) reasoning.value += text;
       },
       onDone() {
         if (current !== generation) return;
@@ -44,5 +49,5 @@ export function useGeneration() {
     });
   }
   onBeforeUnmount(stop);
-  return { output, running, error, stopped, start, stop };
+  return { output, reasoning, running, error, stopped, start, stop };
 }

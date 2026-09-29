@@ -10,6 +10,7 @@ import ToolPicker from "@/components/code-tool/ToolPicker.vue";
 import CodeInputPanel from "@/components/code-tool/CodeInputPanel.vue";
 import GenerationOutput from "@/components/code-tool/GenerationOutput.vue";
 import type { CodeTool } from "@/types";
+import type { CodeToolRunContext } from "@/utils/code-tool-export";
 const tools = shallowRef<CodeTool[]>([]);
 const selected = shallowRef("explain");
 const model = shallowRef<string>(MODEL_OPTIONS[0].value);
@@ -17,7 +18,10 @@ const code = shallowRef("");
 const language = shallowRef("");
 const loading = shallowRef(false);
 const loadError = shallowRef("");
-const { output, running, error, stopped, start, stop } = useGeneration();
+const runContext = shallowRef<CodeToolRunContext>({
+  title: "代码工具报告", model: "", input: "", language: "", createdAt: "",
+});
+const { output, reasoning, running, error, stopped, start, stop } = useGeneration();
 const activeTool = computed(() =>
   tools.value.find((item) => item.key === selected.value),
 );
@@ -27,6 +31,13 @@ function run() {
     ElMessage.warning("请填写翻译后的目标语言");
     return;
   }
+  runContext.value = {
+    title: activeTool.value.name,
+    model: model.value,
+    input: code.value,
+    language: language.value.trim(),
+    createdAt: new Date().toISOString(),
+  };
   start(`/api/code-tools/${selected.value}/stream`, {
     model: model.value,
     code: code.value,
@@ -93,9 +104,11 @@ onMounted(load);
         @stop="stop"
       /><GenerationOutput
         :output="output"
+        :reasoning="reasoning"
         :running="running"
         :error="error"
         :stopped="stopped"
+        :context="runContext"
       />
     </div>
   </div>
