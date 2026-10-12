@@ -39,26 +39,26 @@
 
 ## 0.1 已完成 / 进行中 / 未开始
 
-| 模块 / 能力                | 当前状态 | 代码位置 / 说明                                                                                                                          | 下一步                                                        |
-| -------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
-| 后端基础工程               | 已完成   | `backend/src/app.ts`、`backend/src/server.ts`，已包含 Express、MongoDB 连接、健康检查、统一错误处理入口                                  | 后续路由继续挂到`/api/*`                                      |
-| 用户注册 / 登录 / 当前用户 | 已完成   | `backend/src/routes/auth.routes.ts`、`backend/src/services/auth.service.ts`，已接入 bcrypt、JWT、Zod                                     | 补充接口测试和 token 过期场景验证                             |
-| 前端基础工程               | 已完成   | `frontend/src/main.ts`、`frontend/src/router/index.ts`、`frontend/src/api/http.ts`，已接入 Vue Router、Pinia、Element Plus、Axios 拦截器 | 补充路由与 401 行为测试                                       |
-| 前端 Prompt 页面骨架       | 已完成   | `PromptList.vue`、`PromptWorkspace.vue`、`PromptEditor.vue`、`VariableForm.vue`、`ModelSelector.vue` 已接通后端 API                      | 与 Provider 动态模型联动（后续增强）                         |
-| 前端 SSE 消费工具          | 已完成   | `frontend/src/utils/sse.ts` 实现 `fetch + ReadableStream + AbortController`，并处理流中 `error` 事件                                     | 供 AI 对话、代码工具复用流式消费                              |
-| Prompt 后端 CRUD           | 已完成   | `backend/src/routes/prompt.routes.ts`、`services/prompt.service.ts`，带 userId 资源隔离、分页与关键词搜索                                | 补接口测试                                                    |
-| Prompt 版本管理            | 已完成   | `backend/src/models/prompt-version.model.ts`，内容变化自动生成新版本，支持恢复                                                           | 补版本对比视图（可选）                                        |
-| Prompt 调用历史            | 已完成   | `backend/src/models/chat-record.model.ts` + `/api/chat-records`，记录落库、分页、详情                                                    | 补详情复用入口                                                |
-| AI Adapter / DeepSeek      | 已完成   | `backend/src/services/ai/openai-client.ts` + `deepseek.adapter.ts` + `ai.service.ts`，非流式 `chat` 已实现，Key 仅后端读取               | 填`DEEPSEEK_API_KEY` 后联调真实调用                           |
-| SSE 后端流式转发           | 已完成   | `backend/src/services/chat.service.ts` 的 `streamChat`，转发 chunk、落库、客户端断开 abort、流中回传错误事件                             | 与真实 Key 联调中断/完成事件                                  |
-| Qwen / 第二模型            | 已完成   | `backend/src/services/ai/qwen.adapter.ts`，与 DeepSeek 共用 OpenAI 兼容客户端，`AIService` 统一按模型注册                                | 填`QWEN_API_KEY` 后验证                                       |
-| Anthropic / 第三模型        | 已完成   | `backend/src/services/ai/anthropic.adapter.ts`，原生 Messages API（`x-api-key` + `system` 顶层字段 + 事件式 SSE），`AIService` 统一注册       | 填`ANTHROPIC_API_KEY` 后联调，模型 ID 可在 `ai.service.ts` 常量调整 |
-| Provider 配置              | 已完成（基础版） | `provider.routes.ts`、`provider.service.ts`、`ProviderSettings.vue` 已支持内置 Provider、用户 API Key 保存与脱敏 | 补充自定义 Provider CRUD、动态模型列表、连通性测试（后续增强） |
-| AI 对话                    | 已完成   | `conversation.routes.ts`、`conversation.service.ts`、`ChatView.vue` 已支持会话、消息、多轮上下文与 SSE 流式输出                       | 补接口测试与异常场景验证                                      |
-| 代码工具                   | 已完成   | `code-tool.routes.ts`、`code-tool.service.ts`、`CodeToolView.vue` 已支持固定场景、run/stream 与结果落库                             | 补接口测试与结果复用                                          |
-| 统一历史记录               | 已完成   | `history.routes.ts`、`history.service.ts`、`HistoryView.vue` 已支持对话/代码工具聚合、搜索、来源筛选、继续对话、再次运行、复制输入/结果和导出 Markdown | 补自动化测试与更细粒度的历史详情                              |
-| 部署                       | 未开始   | 文档有 Docker / Nginx 方案，仓库暂无 Dockerfile / compose                                                                                | Day 7 后补齐并跑通                                            |
-| 测试 / Lint / 格式化       | 未开始   | 当前`package.json` 只有 dev/build/start/typecheck                                                                                        | 补 Vitest / Supertest / ESLint / Prettier，再把命令加入质量门 |
+| 模块 / 能力                | 当前状态         | 代码位置 / 说明                                                                                                                                        | 下一步                                                              |
+| -------------------------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------- |
+| 后端基础工程               | 已完成           | `backend/src/app.ts`、`backend/src/server.ts`，已包含 Express、MongoDB 连接、健康检查、统一错误处理入口                                                | 后续路由继续挂到`/api/*`                                            |
+| 用户注册 / 登录 / 当前用户 | 已完成           | `backend/src/routes/auth.routes.ts`、`backend/src/services/auth.service.ts`，已接入 bcrypt、JWT、Zod                                                   | 补充接口测试和 token 过期场景验证                                   |
+| 前端基础工程               | 已完成           | `frontend/src/main.ts`、`frontend/src/router/index.ts`、`frontend/src/api/http.ts`，已接入 Vue Router、Pinia、Element Plus、Axios 拦截器               | 补充路由与 401 行为测试                                             |
+| 前端 Prompt 页面骨架       | 已完成           | `PromptList.vue`、`PromptWorkspace.vue`、`PromptEditor.vue`、`VariableForm.vue`、`ModelSelector.vue` 已接通后端 API                                    | 与 Provider 动态模型联动（后续增强）                                |
+| 前端 SSE 消费工具          | 已完成           | `frontend/src/utils/sse.ts` 实现 `fetch + ReadableStream + AbortController`，并处理流中 `error` 事件                                                   | 供 AI 对话、代码工具复用流式消费                                    |
+| Prompt 后端 CRUD           | 已完成           | `backend/src/routes/prompt.routes.ts`、`services/prompt.service.ts`，带 userId 资源隔离、分页与关键词搜索                                              | 补接口测试                                                          |
+| Prompt 版本管理            | 已完成           | `backend/src/models/prompt-version.model.ts`，内容变化自动生成新版本，支持恢复                                                                         | 补版本对比视图（可选）                                              |
+| Prompt 调用历史            | 已完成           | `backend/src/models/chat-record.model.ts` + `/api/chat-records`，记录落库、分页、详情                                                                  | 补详情复用入口                                                      |
+| AI Adapter / DeepSeek      | 已完成           | `backend/src/services/ai/openai-client.ts` + `deepseek.adapter.ts` + `ai.service.ts`，非流式 `chat` 已实现，Key 仅后端读取                             | 填`DEEPSEEK_API_KEY` 后联调真实调用                                 |
+| SSE 后端流式转发           | 已完成           | `backend/src/services/chat.service.ts` 的 `streamChat`，转发 chunk、落库、客户端断开 abort、流中回传错误事件                                           | 与真实 Key 联调中断/完成事件                                        |
+| Qwen / 第二模型            | 已完成           | `backend/src/services/ai/qwen.adapter.ts`，与 DeepSeek 共用 OpenAI 兼容客户端，`AIService` 统一按模型注册                                              | 填`QWEN_API_KEY` 后验证                                             |
+| Anthropic / 第三模型       | 已完成           | `backend/src/services/ai/anthropic.adapter.ts`，原生 Messages API（`x-api-key` + `system` 顶层字段 + 事件式 SSE），`AIService` 统一注册                | 填`ANTHROPIC_API_KEY` 后联调，模型 ID 可在 `ai.service.ts` 常量调整 |
+| Provider 配置              | 已完成（基础版） | `provider.routes.ts`、`provider.service.ts`、`ProviderSettings.vue` 已支持内置 Provider、用户 API Key 保存与脱敏                                       | 补充自定义 Provider CRUD、动态模型列表、连通性测试（后续增强）      |
+| AI 对话                    | 已完成           | `conversation.routes.ts`、`conversation.service.ts`、`ChatView.vue` 已支持会话、消息、多轮上下文与 SSE 流式输出                                        | 补接口测试与异常场景验证                                            |
+| 代码工具                   | 已完成           | `code-tool.routes.ts`、`code-tool.service.ts`、`CodeToolView.vue` 已支持固定场景、run/stream 与结果落库                                                | 补接口测试与结果复用                                                |
+| 统一历史记录               | 已完成           | `history.routes.ts`、`history.service.ts`、`HistoryView.vue` 已支持对话/代码工具聚合、搜索、来源筛选、继续对话、再次运行、复制输入/结果和导出 Markdown | 补自动化测试与更细粒度的历史详情                                    |
+| 部署                       | 未开始           | 文档有 Docker / Nginx 方案，仓库暂无 Dockerfile / compose                                                                                              | Day 7 后补齐并跑通                                                  |
+| 测试 / Lint / 格式化       | 未开始           | 当前`package.json` 只有 dev/build/start/typecheck                                                                                                      | 补 Vitest / Supertest / ESLint / Prettier，再把命令加入质量门       |
 
 ## 0.2 当前开发优先级
 
@@ -73,6 +73,7 @@
 ## 0.3 文档维护规则
 
 - `Claude.md` 是项目开发文档的唯一真源。
+- `PROJECT_KNOWLEDGE.md` 是学习和代码导航补充，记录技术知识点与端到端代码流；接口契约、功能状态和开发约定仍以本文档为准。
 - `AGENTS.md` 只作为 AI agent 入口，指向 `Claude.md`，不要再复制一整份内容。
 - 新增模块时，必须同步更新：状态表、目录结构、数据模型、API 设计、前端页面、验收标准。
 - 如果代码和文档不一致，优先把不一致写到状态表，再决定改代码还是改文档。

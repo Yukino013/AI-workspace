@@ -33,13 +33,13 @@ npm run dev
 
 ## 模块与整合方式
 
-| 模块 | 主要能力 |
-| --- | --- |
-| Prompt 资源库 / 工作台 | 搜索、创建、编辑、变量注入、版本恢复、模型调试 |
-| AI 对话 | 新建 / 删除 / 搜索会话、多轮流式回复、停止生成 |
-| 代码工具 | 解释、翻译、重构、审查、生成测试；翻译传递目标语言 |
-| 历史记录 | 搜索、详情、复制、Markdown 导出、继续对话、再次运行代码工具 |
-| 模型与 API | 查看配置状态、保存或清除个人密钥 |
+| 模块                   | 主要能力                                                    |
+| ---------------------- | ----------------------------------------------------------- |
+| Prompt 资源库 / 工作台 | 搜索、创建、编辑、变量注入、版本恢复、模型调试              |
+| AI 对话                | 新建 / 删除 / 搜索会话、多轮流式回复、停止生成              |
+| 代码工具               | 解释、翻译、重构、审查、生成测试；翻译传递目标语言          |
+| 历史记录               | 搜索、详情、复制、Markdown 导出、继续对话、再次运行代码工具 |
+| 模型与 API             | 查看配置状态、保存或清除个人密钥                            |
 
 统一外壳与主题位于 `frontend/src/components/layout/AppShell.vue` 和 `frontend/src/styles/theme.css`。对话与生成的异步状态集中到 `frontend/src/composables`；业务展示组件按 `chat`、`code-tool`、`history` 分组。后端继续沿用 routes → controllers → services → models 分层与 `{ code, message, data }` 响应格式。
 
@@ -86,7 +86,7 @@ npm run dev --prefix frontend
 - 历史查询改为批量读取消息，避免逐会话查询；当前仍在内存中整合分页，大数据量下应继续改进数据库侧分页。
 - Element Plus 当前全量注册，生产构建仍可能提示主包较大，本轮未以拆包掩盖此问题。
 
-详细架构约定见 `AGENTS.md`，前端开发约定见 `frontend/README.md`。
+项目状态和接口约定见 `Claude.md`；全栈知识地图与端到端代码流见 `PROJECT_KNOWLEDGE.md`；前端开发约定见 `frontend/README.md`。
 
 ## Apple Silicon：Node 架构与原生依赖
 
