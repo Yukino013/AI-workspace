@@ -14,6 +14,14 @@ export const updatePromptSchema = createPromptSchema;
 
 export type UpdatePromptPayload = z.infer<typeof updatePromptSchema>;
 
+export const importPromptsSchema = z.object({
+  format: z.literal("ai-workbench-prompts"),
+  version: z.literal(1),
+  prompts: z.array(createPromptSchema).max(500, "一次最多导入 500 条 Prompt"),
+});
+
+export type ImportPromptsPayload = z.infer<typeof importPromptsSchema>;
+
 // 查询参数校验
 export const queryPromptsSchema = z.object({
   page: z.coerce.number().int().min(1).default(1),

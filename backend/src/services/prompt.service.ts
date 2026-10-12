@@ -91,6 +91,28 @@ export async function listPrompts(userId: string, query: ListQuery) {
   return { items: docs.map(toPromptDto), total, page: query.page, pageSize: query.pageSize };
 }
 
+export async function exportPrompts(userId: string) {
+  const docs = await Prompt.find({ userId }).sort({ updatedAt: -1 });
+  return {
+    format: 'ai-workbench-prompts' as const,
+    version: 1 as const,
+    exportedAt: new Date().toISOString(),
+    prompts: docs.map(({ name, description, content }) => ({
+      name,
+      description: description ?? '',
+      content,
+    })),
+  };
+}
+
+export async function importPrompts(userId: string, prompts: PromptInput[]) {
+  const imported = [];
+  for (const prompt of prompts) {
+    imported.push(await createPrompt(userId, prompt));
+  }
+  return imported.length;
+}
+
 export async function createPrompt(userId: string, input: PromptInput) {
   const variables = extractVariables(input.content);
   const prompt = await Prompt.create({

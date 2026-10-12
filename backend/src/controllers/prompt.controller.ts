@@ -2,6 +2,8 @@ import type { Request, Response } from 'express';
 import {
   createPrompt,
   deletePrompt,
+  exportPrompts,
+  importPrompts,
   getPrompt,
   listPrompts,
   listVersions,
@@ -21,6 +23,17 @@ function parseQuery(query: Request['query']) {
 export async function list(req: Request, res: Response) {
   const data = await listPrompts(req.user!.userId, parseQuery(req.query));
   res.json(ok(data));
+}
+
+export async function exportAll(req: Request, res: Response) {
+  const data = await exportPrompts(req.user!.userId);
+  res.setHeader('Content-Disposition', 'attachment; filename="prompts.json"');
+  res.json(data);
+}
+
+export async function importAll(req: Request, res: Response) {
+  const importedCount = await importPrompts(req.user!.userId, req.body.prompts);
+  res.status(201).json(ok({ importedCount }));
 }
 
 export async function create(req: Request, res: Response) {

@@ -1,10 +1,12 @@
 import { Router } from 'express';
 import { auth } from '../middleware/auth.middleware.js';
 import { validate } from '../middleware/validate.middleware.js';
-import { createPromptSchema, updatePromptSchema } from '../schemas/prompt.schema.js';
+import { createPromptSchema, importPromptsSchema, updatePromptSchema } from '../schemas/prompt.schema.js';
 import {
   create,
+  exportAll,
   getOne,
+  importAll,
   list,
   remove,
   restore,
@@ -18,6 +20,8 @@ const router = Router();
 router.use(auth);
 
 router.get('/', list);
+router.get('/export', exportAll);
+router.post('/import', validate(importPromptsSchema), importAll);
 router.post('/', validate(createPromptSchema), create);
 router.get('/:id', getOne);
 router.put('/:id', validate(updatePromptSchema), update);
