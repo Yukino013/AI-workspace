@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import {
   login as loginService,
+  logoutAll as logoutAllService,
   me as meService,
   register as registerService,
   updateAvatar as updateAvatarService,
@@ -41,4 +42,10 @@ export async function updateAvatar(req: Request, res: Response) {
   const avatar = `/uploads/${req.file.filename}`;
   const data = await updateAvatarService(req.user!.userId, avatar);
   res.json(ok(data));
+}
+
+export async function logoutAll(req: Request, res: Response) {
+  const { userId, tokenVersion } = req.user!;
+  await logoutAllService(userId, tokenVersion);
+  res.json(ok(null));
 }

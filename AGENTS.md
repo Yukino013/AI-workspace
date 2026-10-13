@@ -560,12 +560,16 @@ JWT
 POST /api/auth/register
 POST /api/auth/login
 GET  /api/auth/me
+POST /api/auth/logout-all
 ```
 
 关键实现：
 
 - 密码使用 `bcrypt.hash()` 存储，登录时 `bcrypt.compare()` 校验
-- JWT payload：`{ userId, username }`，过期时间 `7d`
+- JWT payload：`{ userId, username, tokenVersion }`，默认过期时间 `7d`
+- 每次鉴权查询用户并比较 `tokenVersion`；退出全部设备通过条件更新原子递增版本
+- 不带版本号的旧 JWT 需要重新登录；旧用户文档缺失版本字段时按 0 处理
+- 前端退出时先请求 `/api/auth/logout-all`，成功后清理本地状态；已建立的 SSE 不强制中断
 - 前端所有请求带：
 
 ```text
@@ -1025,6 +1029,7 @@ GET /api/history?keyword=&type=chat|code-tool&page=1&pageSize=20
 POST /api/auth/register        # 注册（公开）
 POST /api/auth/login           # 登录（公开）
 GET  /api/auth/me              # 当前用户（🔒）
+POST /api/auth/logout-all      # 撤销当前账号全部旧登录凭证（🔒）
 ```
 
 登录响应：
@@ -1282,18 +1287,10 @@ export const validate = (schema: ZodSchema) => (req, res, next) => {
 
 ## 11.2 鉴权中间件
 
-```ts
-export function auth(req, res, next) {
-  const token = req.headers.authorization?.replace("Bearer ", "");
-  if (!token) return res.status(401).json(fail(40101, "未登录"));
-  try {
-    req.user = jwt.verify(token, process.env.JWT_SECRET);
-    next();
-  } catch {
-    return res.status(401).json(fail(40101, "token 无效或已过期"));
-  }
-}
-```
+鉴权逻辑以 `backend/src/middleware/auth.middleware.ts` 为准：解析 Bearer token，
+限定 HS256 并验证签名、过期时间和版本字段，然后查询用户并比较当前版本。
+用户不存在或版本不匹配返回 401；数据库异常交给统一错误处理，不伪装成登录失效。
+成功后挂载 `{ userId, username, tokenVersion }` 到 `req.user`。
 
 ## 11.3 统一错误处理
 

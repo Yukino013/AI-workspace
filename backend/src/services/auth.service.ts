@@ -5,13 +5,13 @@ import { config } from '../config/index.js';
 import { AppError } from '../utils/AppError.js';
 
 /** 签发 JWT：payload 只放身份信息，见设计文档 7.1 */
-function signToken(userId: string, username: string): string {
+function signToken(userId: string, username: string, tokenVersion: number): string {
   // @types/jsonwebtoken 把 expiresIn 限定为 ms 字面量类型（如 '7d'），
   // 而环境变量是运行时 string，需断言才能通过类型检查
   const options = {
     expiresIn: config.jwt.expiresIn as SignOptions['expiresIn'],
   };
-  return jwt.sign({ userId, username }, config.jwt.secret, options);
+  return jwt.sign({ userId, username, tokenVersion }, config.jwt.secret, { ...options, algorithm: 'HS256' });
 }
 
 /** 去掉敏感字段，统一对外返回的用户结构 */
@@ -51,7 +51,7 @@ export async function login(username: string, password: string) {
     throw new AppError(401, 40101, '用户名或密码错误');
   }
 
-  const token = signToken(user._id.toString(), user.username);
+  const token = signToken(user._id.toString(), user.username, user.tokenVersion ?? 0);
   return { token, user: toUserDto(user) };
 }
 
@@ -84,4 +84,17 @@ export async function updateAvatar(userId: string, avatar: string) {
     throw new AppError(404, 40401, '用户不存在');
   }
   return toUserDto(user);
+}
+
+/** 只撤销本次认证的版本，避免并发的旧退出请求影响重新登录后的凭证。 */
+export async function logoutAll(userId: string, tokenVersion: number) {
+  await User.updateOne(
+    {
+      _id: userId,
+      ...(tokenVersion === 0
+        ? { $or: [{ tokenVersion: 0 }, { tokenVersion: { $exists: false } }] }
+        : { tokenVersion }),
+    },
+    { $inc: { tokenVersion: 1 } },
+  );
 }

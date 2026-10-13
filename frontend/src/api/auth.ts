@@ -22,3 +22,8 @@ export function uploadAvatar(file: File): Promise<User> {
   form.append('avatar', file);
   return http.post('/auth/avatar', form);
 }
+
+/** 撤销当前账号在所有设备上的登录凭证。 */
+export function logoutAll(): Promise<null> {
+  return http.post('/auth/logout-all');
+}

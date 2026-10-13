@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, shallowRef, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useAuthStore } from "@/stores/auth";
+import { logoutAll } from "@/api/auth";
 import { useTheme } from "@/composables/useTheme";
 import AppIcon from "@/components/common/AppIcon.vue";
 import BrandMark from "@/components/common/BrandMark.vue";
@@ -79,9 +80,20 @@ watch(
     mobileOpen.value = false;
   },
 );
-function logout() {
-  auth.logout();
-  router.push("/login");
+const loggingOut = shallowRef(false);
+async function logout() {
+  if (loggingOut.value) return;
+  loggingOut.value = true;
+  try {
+    await logoutAll();
+    auth.logout();
+    await router.replace("/login");
+  } catch {
+    // HTTP 拦截器展示错误；网络/服务错误时保留凭证，允许重试撤销。
+    // 401 表示凭证已失效，由拦截器清理并跳转。
+  } finally {
+    loggingOut.value = false;
+  }
 }
 </script>
 <template>
@@ -223,7 +235,14 @@ function logout() {
               :name="theme === 'dark' ? 'sun' : 'moon'"
               :size="18"
             /></button
-          ><button class="icon-button" aria-label="退出登录" @click="logout">
+          ><button
+            class="icon-button"
+            aria-label="退出全部设备"
+            title="退出全部设备"
+            :disabled="loggingOut"
+            :aria-busy="loggingOut"
+            @click="logout"
+          >
             <AppIcon name="logout" :size="18" />
           </button>
         </div>
