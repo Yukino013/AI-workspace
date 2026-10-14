@@ -1373,6 +1373,8 @@ location /api/chat/stream {
 ```text
 ☐ 密码使用 bcrypt 加密存储，禁止明文
 ☐ JWT_SECRET 使用强随机值，token 设过期时间
+☑ NODE_ENV=production 时启动校验 JWT_SECRET：拒绝缺失、已知占位值、空白、少于 32 字节或单字符重复值；错误不输出密钥
+☐ 生产部署显式设置 NODE_ENV=production 并注入随机密钥
 ☐ AI API Key 只存在后端 .env，绝不放前端（含打包产物）
 ☐ .env 文件加入 .gitignore，不上传到仓库
 ☐ 所有业务接口挂 auth 中间件

@@ -1,5 +1,9 @@
 import 'dotenv/config';
 import path from 'node:path';
+import { resolveJwtSecret } from './jwt-secret.js';
+
+// 在配置模块加载时校验，失败则在数据库连接和 HTTP 监听之前终止启动。
+const jwtSecret = resolveJwtSecret(process.env);
 
 /** 集中读取环境变量，避免散落在各处。见设计文档第 15 章 */
 export const config = {
@@ -8,7 +12,7 @@ export const config = {
   /** 头像等上传文件的落盘目录（相对于 backend 运行目录） */
   uploadDir: process.env.UPLOAD_DIR ?? path.resolve(process.cwd(), 'uploads'),
   jwt: {
-    secret: process.env.JWT_SECRET ?? 'dev-secret-do-not-use-in-prod',
+    secret: jwtSecret,
     expiresIn: process.env.JWT_EXPIRES_IN ?? '7d',
   },
   // 内置默认 Provider：API Key 只存后端 .env，绝不下发前端
