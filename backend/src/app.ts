@@ -12,6 +12,7 @@ import providerRoutes from "./routes/provider.routes.js";
 import conversationRoutes from "./routes/conversation.routes.js";
 import codeToolRoutes from "./routes/code-tool.routes.js";
 import historyRoutes from "./routes/history.routes.js";
+import workflowRoutes from "./routes/workflow.routes.js";
 
 const app = express();
 
@@ -38,6 +39,7 @@ app.use("/api/providers", providerRoutes);
 app.use("/api/conversations", conversationRoutes);
 app.use("/api/code-tools", codeToolRoutes);
 app.use("/api/history", historyRoutes);
+app.use("/api/workflows", workflowRoutes);
 app.use("/api/prompts", promptRoutes);
 app.use("/api/chat", chatRoutes);
 app.use("/api/chat-records", recordRoutes);

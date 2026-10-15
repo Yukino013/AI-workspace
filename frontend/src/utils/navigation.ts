@@ -25,6 +25,12 @@ export const workspaceLinks = [
     description: "解释、翻译、重构、审查和测试",
   },
   {
+    path: "/workflows",
+    label: "AI 工作流",
+    icon: "workflow",
+    description: "串联 Prompt 步骤，保存并复用常见 AI 流程",
+  },
+  {
     path: "/history",
     label: "历史记录",
     icon: "history",

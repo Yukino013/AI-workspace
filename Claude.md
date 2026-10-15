@@ -1,19 +1,19 @@
 # AI 工作台开发文档
 
-> 面向开发者的 AI 开发工具（Prompt 工作台 + AI 对话 + 代码工具 + 历史记录）
+> 面向开发者的 AI 开发工具（Prompt 工作台 + AI 对话 + 代码工具 + AI 工作流 + 历史记录）
 > 核心目标：通过一个完整项目掌握 `Vue 3 + Express + MongoDB + AI API + SSE + JWT + 第三方 API 封装`
 
 ---
 
 ## 开发状态与约定
 
-**当前状态**：核心功能链路已完成——后端已实现注册/登录、Prompt CRUD、版本与调用历史、AI Adapter（DeepSeek/Qwen/Anthropic）、SSE 流式输出，以及 Day 8–10 的 Provider 配置、AI 对话、代码工具和统一历史记录；前端对应页面也已接入真实后端。当前 Provider 范围是内置三家模型和用户自定义 API Key，部署、自动化测试、Lint/格式化及动态 Provider 扩展仍待完成。本文档既是开发设计文档，也是本项目的 CLAUDE.md，后续开发一律以本文档为准。
+**当前状态**：核心功能链路已完成——后端已实现注册/登录、Prompt CRUD、版本与调用历史、AI Adapter（DeepSeek/Qwen/Anthropic）、SSE 流式输出，以及 Provider 配置、AI 对话、代码工具、顺序式 AI 工作流和统一历史记录；前端对应页面也已接入真实后端。工作流最多 10 个顺序 Prompt 步骤，支持变量映射、配置快照、流式运行记录、取消和失败步骤重试。当前 Provider 范围是内置三家模型和用户自定义 API Key，部署、自动化测试、Lint/格式化及动态 Provider 扩展仍待完成。本文档既是开发设计文档，也是本项目的 CLAUDE.md，后续开发一律以本文档为准。
 
 **前端约定**：
 
 - Vue 3 组合式 API（`<script setup>`）+ TypeScript，不用 Options API
 - 脚手架基于 Vite；前端端口 `5173`，通过 Vite proxy 把 `/api` 转发到后端 `3000`
-- 页面为 8 个（见第 14 章）；状态管理用 Pinia
+- 页面为 9 个；状态管理用 Pinia
 - AI 输出用 markdown-it 渲染；Axios 封装统一注入 token（见第 10 章）
 
 **后端约定**：
@@ -22,12 +22,13 @@
 - 统一响应 `{ code, message, data }`，错误码以第 9 章为准
 - 参数校验用 Zod；密码用 bcryptjs；鉴权用 JWT（见第 7.1 / 11 章）
 
-**四大并列功能模块**（Prompt 功能保持不变，新增三项并列）：
+**五大并列功能模块**：
 
 1. **Prompt 工作台**（原有，见 7.2–7.8）
 2. **AI 对话**（新增，见 7.9）
 3. **代码工具**（新增，见 7.10）
-4. **历史记录**（新增，见 7.11）
+4. **AI 工作流**（新增，顺序编排 Prompt、运行记录和失败步骤重试）
+5. **历史记录**（见 7.11）
 
 **命令**：`frontend` 下 `npm run dev` / `npm run build`；`backend` 下 `npm run dev` / `npm run build` / `npm start`。
 
@@ -57,6 +58,7 @@
 | AI 对话                    | 已完成           | `conversation.routes.ts`、`conversation.service.ts`、`ChatView.vue` 已支持会话、消息、多轮上下文与 SSE 流式输出                                        | 补接口测试与异常场景验证                                            |
 | 代码工具                   | 已完成           | `code-tool.routes.ts`、`code-tool.service.ts`、`CodeToolView.vue` 已支持固定场景、run/stream 与结果落库                                                | 补接口测试与结果复用                                                |
 | 统一历史记录               | 已完成           | `history.routes.ts`、`history.service.ts`、`HistoryView.vue` 已支持对话/代码工具聚合、搜索、来源筛选、继续对话、再次运行、复制输入/结果和导出 Markdown | 补自动化测试与更细粒度的历史详情                                    |
+| 顺序式 AI 工作流           | 已完成（MVP）    | `workflow.routes.ts`、`workflow.service.ts`、`WorkflowView.vue` 支持 Prompt 快照、变量映射、SSE 顺序执行、取消、运行记录与失败步骤重试          | 后续按实际使用增加模板、效果评测和更高级编排                        |
 | 部署                       | 未开始           | 文档有 Docker / Nginx 方案，仓库暂无 Dockerfile / compose                                                                                              | Day 7 后补齐并跑通                                                  |
 | 测试 / Lint / 格式化       | 未开始           | 当前`package.json` 只有 dev/build/start/typecheck                                                                                                      | 补 Vitest / Supertest / ESLint / Prettier，再把命令加入质量门       |
 
@@ -88,14 +90,15 @@ AI 开发者工作台
 
 ## 1.2 项目定位
 
-面向开发者的 AI 开发工具，包含**四大并列功能模块**：
+面向开发者的 AI 开发工具，当前包含**五大并列功能模块**：
 
 | 模块            | 说明                                                                      |
 | --------------- | ------------------------------------------------------------------------- |
 | ① Prompt 工作台 | 创建/编辑 Prompt、注入变量、调用 AI、流式输出、版本管理（原有，保持不变） |
 | ② AI 对话       | 配置多个 API/模型，统一聊天入口，多轮对话                                 |
 | ③ 代码工具      | 代码解释/翻译/重构/Review/生成测试等固定场景，选中代码直接套用            |
-| ④ 历史记录      | 保存对话与 AI 结果，支持搜索与复用                                        |
+| ④ AI 工作流     | 顺序编排最多 10 个 Prompt 步骤，支持输入映射、流式运行和失败步骤重试       |
+| ⑤ 历史记录      | 保存对话与 AI 结果，支持搜索与复用                                        |
 
 项目重点不是堆功能，而是通过一个完整项目掌握：
 
@@ -105,7 +108,7 @@ AI 开发者工作台
 
 # 2. 项目目标
 
-最终实现一个可以实际使用的 AI 开发者工作台，四大模块并列：
+最终实现一个可以实际使用的 AI 开发者工作台，五大模块并列：
 
 **① Prompt 工作台**（原有流程，保持不变）：
 

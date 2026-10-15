@@ -1,4 +1,8 @@
 import bcrypt from 'bcryptjs';
+import { randomUUID } from 'node:crypto';
+import { mkdir, open, rm } from 'node:fs/promises';
+import path from 'node:path';
+import { encodeAvatar } from './avatar-image.service.js';
 import jwt, { type SignOptions } from 'jsonwebtoken';
 import { User } from '../models/user.model.js';
 import { config } from '../config/index.js';
@@ -77,13 +81,29 @@ export async function updateProfile(userId: string, nickname: string) {
   return toUserDto(user);
 }
 
-/** 更新头像：avatar 为上传后的相对 URL 路径（如 /uploads/xxx.png） */
-export async function updateAvatar(userId: string, avatar: string) {
-  const user = await User.findByIdAndUpdate(userId, { avatar }, { new: true });
-  if (!user) {
-    throw new AppError(404, 40401, '用户不存在');
+/** 先校验并编码图片，再保存文件与用户引用；失败时清理本次新文件。 */
+export async function updateAvatar(userId: string, input: Buffer) {
+  const image = await encodeAvatar(input);
+  await mkdir(config.uploadDir, { recursive: true });
+  const filename = `${randomUUID()}.webp`;
+  const filePath = path.join(config.uploadDir, filename);
+  // 独占创建：只清理本次请求创建的文件，不覆盖已有资源。
+  const file = await open(filePath, 'wx');
+  try {
+    try {
+      await file.writeFile(image);
+    } finally {
+      await file.close();
+    }
+    const user = await User.findByIdAndUpdate(userId, { avatar: `/uploads/${filename}` }, { returnDocument: 'after' });
+    if (!user) throw new AppError(404, 40401, '用户不存在');
+    return toUserDto(user);
+  } catch (error) {
+    await rm(filePath, { force: true }).catch((cleanupError) => {
+      console.error('头像上传失败后的文件清理失败', cleanupError);
+    });
+    throw error;
   }
-  return toUserDto(user);
 }
 
 /** 只撤销本次认证的版本，避免并发的旧退出请求影响重新登录后的凭证。 */

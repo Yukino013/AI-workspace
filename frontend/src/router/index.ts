@@ -51,6 +51,11 @@ const router = createRouter({
       component: () => import('@/views/CodeToolView.vue'),
     },
     {
+      path: '/workflows',
+      name: 'workflows',
+      component: () => import('@/views/WorkflowView.vue'),
+    },
+    {
       path: '/history',
       name: 'history',
       component: () => import('@/views/HistoryView.vue'),

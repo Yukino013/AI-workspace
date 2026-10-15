@@ -361,6 +361,7 @@ sequenceDiagram
 | `/api/providers`     | Provider 状态查询和用户 Key 更新                                             |
 | `/api/conversations` | 会话 CRUD、`POST /:id/messages`、`POST /:id/stream`                          |
 | `/api/code-tools`    | 工具列表、`POST /:key/run`、`POST /:key/stream`                              |
+| `/api/workflows`     | Prompt 顺序编排、运行记录、失败步骤重试与取消                                |
 | `/api/history`       | 对话与代码工具统一搜索/筛选/分页                                             |
 | `/uploads`           | 头像静态文件访问                                                             |
 

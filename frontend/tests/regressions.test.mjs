@@ -140,6 +140,26 @@ await test("SSE: public reasoning is delivered separately from final output", as
     done: true,
   });
 });
+await test("SSE: workflow event payloads are delivered without changing chat chunk handling", async () => {
+  const workflowEvents = [];
+  const chunks = [];
+  globalThis.fetch = async () =>
+    response(
+      `data: ${JSON.stringify({ type: "step-start", stepId: "draft" })}\n\n` +
+        delta("Draft") +
+        "data: [DONE]\n\n",
+    );
+  await new Promise((resolve, reject) => {
+    streamEndpoint("/api/workflows/test/runs/stream", {}, {
+      onChunk: (text) => chunks.push(text),
+      onEvent: (event) => workflowEvents.push(event),
+      onDone: resolve,
+      onError: reject,
+    });
+  });
+  assert.deepEqual(workflowEvents, [{ type: "step-start", stepId: "draft" }]);
+  assert.deepEqual(chunks, ["Draft"]);
+});
 await test("SSE: reasoning and content in one chunk are both preserved", async () => {
   globalThis.fetch = async () =>
     response(

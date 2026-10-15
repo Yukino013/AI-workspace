@@ -19,16 +19,16 @@ npm test           # SSE 与历史导出的回归测试
 - 未登录访问页面自动跳转 `/login`，登录态保存在 `localStorage`
 - 开发环境 `/api` 请求通过 Vite proxy 转发到后端 `http://localhost:3000`
 - SSE 流式消费见 `src/utils/sse.ts`：`POST` + `ReadableStream`，**不能用 EventSource**（它只支持 GET）
-- 当前前端已通过 Axios 接入真实后端，覆盖认证、Prompt 工作台、Provider 配置、AI 对话、代码工具、调用历史和统一历史记录；Prompt 列表支持一键复制模板，历史记录支持继续对话、再次运行代码工具、复制输入/结果和导出 Markdown，SSE 流式请求统一使用 `src/utils/sse.ts`
+- 当前前端已通过 Axios 接入真实后端，覆盖认证、Prompt 工作台、Provider 配置、AI 对话、代码工具、顺序式 AI 工作流、调用历史和统一历史记录；工作流可编排最多 10 个 Prompt 步骤、映射变量、流式观察执行、查看历史并从失败步骤重试；Prompt 列表支持一键复制模板，历史记录支持继续对话、再次运行代码工具、复制输入/结果和导出 Markdown，SSE 流式请求统一使用 `src/utils/sse.ts`
 
 ## 目录结构（要点）
 
 - `src/api` —— 接口封装；`http.ts` 为 Axios 实例，统一注入 token、解包 `{code,message,data}`、401 跳登录
 - `src/stores` —— Pinia：`auth` 登录态、`prompt` 当前编辑项 / 模型 / 运行态；业务数据通过 API 持久化
-- `src/views` —— 页面：登录 / Prompt 管理 / Prompt 工作台 / 调用历史 / Provider 配置 / AI 对话 / 代码工具 / 历史记录 / 个人资料
+- `src/views` —— 页面：登录 / Prompt 管理 / Prompt 工作台 / AI 工作流 / 调用历史 / Provider 配置 / AI 对话 / 代码工具 / 历史记录 / 个人资料
 - `src/components/layout` —— 响应式侧栏、移动导航和工作区外壳
-- `src/components/chat`、`code-tool`、`history` —— 按业务拆分的展示组件
-- `src/composables` —— 主题管理、流式生成生命周期、会话加载与切换
+- `src/components/chat`、`code-tool`、`history`、`workflow` —— 按业务拆分的展示组件
+- `src/composables` —— 主题管理、流式生成生命周期、会话加载与切换、工作流执行流状态
 - `src/styles/theme.css` —— 浅色 / 深色设计变量和通用样式
 - `src/utils` —— `variables.ts` 变量提取与渲染、`sse.ts` 流式消费、`markdown.ts` AI 输出渲染、`clipboard.ts` 跨浏览器复制、`history-export.ts` Markdown 导出
 
@@ -46,6 +46,7 @@ GET  /api/auth/me
 
 ## 本次整合的行为约定
 
+- `/workflows` 用于保存和运行顺序 Prompt 工作流；对应后端为 `/api/workflows`，只允许访问当前用户自己的工作流和 Prompt。
 - 主题持久化；窄屏使用抽屉导航，支持 Escape 关闭和焦点管理。
 - Prompt 必须保存后才能运行；内容修改未保存时明确提示，避免运行后端旧版本。
 - 切换会话、停止生成或离开页面会取消前端流式消费，旧请求不得覆盖新会话。

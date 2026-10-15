@@ -10,6 +10,7 @@ export interface StreamPayload {
 export interface StreamHandlers {
   onChunk: (text: string) => void;
   onReasoning?: (text: string) => void;
+  onEvent?: (event: Record<string, unknown>) => void;
   onDone?: () => void;
   onError?: (err: Error) => void;
 }
@@ -45,6 +46,7 @@ export function streamEndpoint(endpoint: string, payload: unknown, handlers: Str
             reasoning?: string;
           };
         }>;
+        [key: string]: unknown;
       };
       try {
         json = JSON.parse(data);
@@ -52,6 +54,7 @@ export function streamEndpoint(endpoint: string, payload: unknown, handlers: Str
         throw new Error("服务器返回了无法解析的 SSE 数据");
       }
       if (json.error?.message) throw new Error(json.error.message);
+      if (typeof json.type === "string") handlers.onEvent?.(json);
       const delta = json.choices?.[0]?.delta;
       const reasoning = delta?.reasoning_content ?? delta?.reasoning ?? "";
       if (reasoning) handlers.onReasoning?.(reasoning);

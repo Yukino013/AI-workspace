@@ -35,12 +35,11 @@ export async function updateProfile(req: Request, res: Response) {
 }
 
 export async function updateAvatar(req: Request, res: Response) {
-  // uploadAvatar 中间件已写入磁盘，req.file 携带文件名
+  // 原始文件尚未写入磁盘，由 service 校验、重新编码并保存
   if (!req.file) {
     throw new AppError(400, 40001, '请选择要上传的图片');
   }
-  const avatar = `/uploads/${req.file.filename}`;
-  const data = await updateAvatarService(req.user!.userId, avatar);
+  const data = await updateAvatarService(req.user!.userId, req.file.buffer);
   res.json(ok(data));
 }
 

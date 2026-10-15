@@ -1,36 +1,15 @@
-import path from 'node:path';
-import fs from 'node:fs';
-import { randomUUID } from 'node:crypto';
 import multer from 'multer';
-import { config } from '../config/index.js';
 import { AppError } from '../utils/AppError.js';
 
-/** 允许的头像图片 MIME 类型 */
 const ALLOWED_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
 
-/** 头像大小上限：2MB */
-const MAX_SIZE = 2 * 1024 * 1024;
-
-// 启动时确保上传目录存在
-fs.mkdirSync(config.uploadDir, { recursive: true });
-
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, config.uploadDir),
-  filename: (_req, file, cb) => {
-    // 随机文件名 + 原始扩展名，避免重名覆盖与路径注入
-    const ext = path.extname(file.originalname).toLowerCase() || '.png';
-    cb(null, `${randomUUID()}${ext}`);
-  },
-});
-
-/**
- * 头像上传中间件：单文件，表单字段名 `avatar`。
- * fileFilter 拒绝非图片类型；超限的 MulterError 由统一错误处理转换。
- */
+/** 原始文件仅暂存在内存；实际内容校验和重新编码成功后才允许写入公开目录。 */
 export const uploadAvatar = multer({
-  storage,
-  limits: { fileSize: MAX_SIZE },
+  storage: multer.memoryStorage(),
+  // Busboy 在达到 parts 数时就触发限制；文件与文本字段另由 files / fields 严格限制。
+  limits: { fileSize: 2 * 1024 * 1024, files: 1, fields: 0, parts: 2 },
   fileFilter: (_req, file, cb) => {
+    // MIME 只用于初筛，不能证明文件内容是图片。
     if (!ALLOWED_TYPES.has(file.mimetype)) {
       return cb(new AppError(400, 40001, '仅支持 jpg / png / webp / gif 图片'));
     }

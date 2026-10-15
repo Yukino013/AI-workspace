@@ -21,12 +21,14 @@ defineProps<{
     | "moon"
     | "plus"
     | "prompt"
+    | "play"
     | "search"
     | "settings"
     | "sparkles"
     | "sun"
     | "user"
-    | "wand";
+    | "wand"
+    | "workflow";
   size?: number;
 }>();
 </script>
@@ -68,6 +70,9 @@ defineProps<{
     <template v-else-if="name === 'panel'">
       <rect x="3" y="4" width="18" height="16" rx="3" />
       <path d="M9 4v16" />
+    </template>
+    <template v-else-if="name === 'play'">
+      <path d="m8 5 11 7-11 7V5Z" />
     </template>
     <template v-else-if="name === 'copy'">
       <rect x="8" y="8" width="12" height="13" rx="2" />
@@ -151,6 +156,11 @@ defineProps<{
       <path
         d="m15 4 5 5L8 21l-5-5L15 4ZM6 13l5 5M18 2v3M22 6h-3M6 2l.8 2.2L9 5l-2.2.8L6 8l-.8-2.2L3 5l2.2-.8L6 2Z"
       />
+    </template>
+    <template v-else-if="name === 'workflow'">
+      <rect x="3" y="4" width="6" height="6" rx="1.5" />
+      <rect x="15" y="14" width="6" height="6" rx="1.5" />
+      <path d="M9 7h4a2 2 0 0 1 2 2v5M12 12l3 3 3-3" />
     </template>
   </svg>
 </template>
