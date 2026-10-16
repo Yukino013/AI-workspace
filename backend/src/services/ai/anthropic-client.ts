@@ -80,10 +80,10 @@ interface AnthropicUsage {
  * 缺失的缓存字段按 0 处理，但只有 `input_tokens` 明确存在才算“已知输入”。
  */
 function readInputTokens(usage: AnthropicUsage | undefined) {
-  if (!Number.isSafeInteger(usage?.input_tokens)) return { tokens: 0, complete: false };
-  const cache = [usage!.cache_creation_input_tokens, usage!.cache_read_input_tokens]
-    .reduce<number>((sum, value) => sum + (Number.isSafeInteger(value) && Number(value) >= 0 ? Number(value) : 0), 0);
-  return { tokens: Number(usage!.input_tokens) + cache, complete: true };
+  const valid = (value: unknown) => Number.isSafeInteger(value) && Number(value) >= 0;
+  const cache = [usage?.cache_creation_input_tokens, usage?.cache_read_input_tokens];
+  const tokens = [usage?.input_tokens, ...cache].reduce<number>((sum, value) => sum + (valid(value) ? Number(value) : 0), 0);
+  return { tokens, complete: valid(usage?.input_tokens) && cache.every(value => value === undefined || valid(value)) };
 }
 
 function readOutputTokens(usage: AnthropicUsage | undefined) {
@@ -127,14 +127,15 @@ export function createAnthropicAdapter(name: string, cfg: AdapterConfig): AIAdap
     });
 
     if (!res.ok) {
-      throw new AppError(502, 50000, `${name} 调用失败（HTTP ${res.status}）：${await res.text()}`);
+      await res.body?.cancel().catch(() => undefined);
+      throw new AppError(502, 50000, `${name} 调用失败（HTTP ${res.status}），请检查 Provider 配置或稍后重试`);
     }
 
     const data = await res.json();
     const input = readInputTokens(data.usage);
     return {
       content: extractText(data),
-      usage: toUsage(input.tokens, readOutputTokens(data.usage), input.complete && Number.isSafeInteger(data.usage?.output_tokens)),
+      usage: toUsage(input.tokens, readOutputTokens(data.usage), input.complete && (Number.isSafeInteger(data.usage?.output_tokens) && data.usage.output_tokens >= 0)),
     };
   }
 
@@ -163,8 +164,8 @@ export function createAnthropicAdapter(name: string, cfg: AdapterConfig): AIAdap
     });
 
     if (!res.ok || !res.body) {
-      const detail = await res.text().catch(() => '');
-      throw new AppError(502, 50000, `${name} 调用失败（HTTP ${res.status}）：${detail}`);
+      await res.body?.cancel().catch(() => undefined);
+      throw new AppError(502, 50000, `${name} 调用失败（HTTP ${res.status}），请检查 Provider 配置或稍后重试`);
     }
 
     const reader = res.body.getReader();
@@ -189,11 +190,13 @@ export function createAnthropicAdapter(name: string, cfg: AdapterConfig): AIAdap
       try {
         json = JSON.parse(data) as typeof json;
       } catch {
-        return [];
+        throw new AppError(502, 50000, `${name} 返回异常流数据，请重试`);
       }
 
       const events: StreamEvent[] = [];
       switch (json.type) {
+        case 'error':
+          throw new AppError(502, 50000, `${name} 流式调用失败，请稍后重试`);
         case 'message_start': {
           const input = readInputTokens(json.message?.usage as AnthropicUsage | undefined);
           hasInput = input.complete;
@@ -208,7 +211,8 @@ export function createAnthropicAdapter(name: string, cfg: AdapterConfig): AIAdap
           }
           break;
         case 'message_delta': {
-          hasOutput = Number.isSafeInteger((json.usage as AnthropicUsage | undefined)?.output_tokens);
+          const output = (json.usage as AnthropicUsage | undefined)?.output_tokens;
+          hasOutput = Number.isSafeInteger(output) && Number(output) >= 0;
           usage = toUsage(usage.promptTokens, readOutputTokens(json.usage as AnthropicUsage | undefined));
           break;
         }
@@ -223,33 +227,40 @@ export function createAnthropicAdapter(name: string, cfg: AdapterConfig): AIAdap
       return events;
     };
 
-    while (!messageStopped) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-
-      // 事件以空行分隔，最后一段不完整事件保留到下一次读取
-      const events = buffer.split(/\r?\n\r?\n/);
-      buffer = events.pop() ?? '';
-
-      for (const event of events) {
-        for (const parsed of consumeEvent(event)) {
+    try {
+      while (!messageStopped) {
+        const { done, value } = await reader.read();
+        if (done) break;
+  
+        buffer += decoder.decode(value, { stream: true });
+  
+        // 事件以空行分隔，最后一段不完整事件保留到下一次读取
+        const events = buffer.split(/\r?\n\r?\n/);
+        buffer = events.pop() ?? '';
+  
+        for (const event of events) {
+          for (const parsed of consumeEvent(event)) {
+            yield parsed;
+          }
+          if (messageStopped) break;
+        }
+      }
+  
+      // 某些网关会直接关闭连接而不补最后一个空行，仍需消费流尾事件
+      buffer += decoder.decode();
+      if (!messageStopped && buffer.trim()) {
+        for (const parsed of consumeEvent(buffer)) {
           yield parsed;
         }
-        if (messageStopped) break;
       }
+  
+      signal.throwIfAborted();
+      if (!messageStopped) throw new AppError(502, 50000, `${name} 响应意外中断，请重试`);
+      yield { type: 'done', usage: { ...usage, complete: messageStopped && hasInput && hasOutput } };
+    } finally {
+      await reader.cancel().catch(() => undefined);
+      reader.releaseLock();
     }
-
-    // 某些网关会直接关闭连接而不补最后一个空行，仍需消费流尾事件
-    buffer += decoder.decode();
-    if (!messageStopped && buffer.trim()) {
-      for (const parsed of consumeEvent(buffer)) {
-        yield parsed;
-      }
-    }
-
-    yield { type: 'done', usage: { ...usage, complete: messageStopped && hasInput && hasOutput } };
   }
 
   return { chat, stream };

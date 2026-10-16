@@ -1,5 +1,5 @@
 import { DailyUsage, QuotaAccount, UsageRequest, DEFAULT_DAILY_LIMIT, MAX_ACTIVE_REQUESTS } from '../../models/usage.model.js';
-import { ensureUsageReady, ensureAccount, updateQuota } from './quota.service.js';
+import { ensureUsageReady, ensureAccount, updateQuota, transaction } from './quota.service.js';
 import { quotaDate } from './rules.js';
 import { AppError } from '../../utils/AppError.js';
 
@@ -13,30 +13,31 @@ function count(doc: Record<string, unknown> | null, key: string) { return Number
 export async function getUsageOverview(userId: string, days: 7 | 30 = 7) {
   await ensureUsageReady();
   await ensureAccount(userId);
-  const today = quotaDate();
-  const account = await QuotaAccount.findOne({ userId }).lean();
-  const limit = account?.dailyTokenLimit ?? DEFAULT_DAILY_LIMIT;
-  const from = shiftDate(today, -(days - 1));
-  const [rows, sourceRows, modelRows] = await Promise.all([
-    DailyUsage.find({ userId, quotaDate: { $gte: from, $lte: today } }).sort({ quotaDate: 1 }).lean(),
-    UsageRequest.aggregate([{ $match: { userId, quotaDate: { $gte: from, $lte: today }, status: 'settled', startedAt: { $ne: null } } }, { $group: {
-      _id: '$source', tokens: { $sum: '$chargedTokens' }, requests: { $sum: 1 }, estimated: { $sum: { $cond: [{ $eq: ['$usageSource', 'estimated'] }, 1, 0] } },
-    } }, { $sort: { tokens: -1 } }]),
-    UsageRequest.aggregate([{ $match: { userId, quotaDate: { $gte: from, $lte: today }, status: 'settled', startedAt: { $ne: null } } }, { $group: {
-      _id: '$model', tokens: { $sum: '$chargedTokens' }, requests: { $sum: 1 },
-    } }, { $sort: { tokens: -1 } }, { $limit: 10 }]),
-  ]);
-  const byDate = new Map(rows.map(row => [row.quotaDate, row]));
-  const trend = Array.from({ length: days }, (_, index) => {
-    const date = shiftDate(from, index);
-    const row = byDate.get(date) as unknown as Record<string, unknown> | undefined;
-    return { date, consumedTokens: count(row ?? null, 'consumedTokens'), reservedTokens: count(row ?? null, 'reservedTokens'), requests: count(row ?? null, 'startedRequests') };
+  return transaction(async session => {
+    const today = quotaDate();
+    const account = await QuotaAccount.findOne({ userId }).session(session).lean();
+    const limit = account?.dailyTokenLimit ?? DEFAULT_DAILY_LIMIT;
+    const from = shiftDate(today, -(days - 1));
+    // 同一事务快照中顺序读取，避免结算/修改额度期间拼出不一致的概览。
+    const rows = await
+      DailyUsage.find({ userId, quotaDate: { $gte: from, $lte: today } }).sort({ quotaDate: 1 }).session(session).lean();
+    const sourceRows = await UsageRequest.aggregate([{ $match: { userId, quotaDate: { $gte: from, $lte: today }, status: 'settled', startedAt: { $ne: null } } }, { $group: {
+        _id: '$source', tokens: { $sum: '$chargedTokens' }, requests: { $sum: 1 }, estimated: { $sum: { $cond: [{ $eq: ['$usageSource', 'estimated'] }, 1, 0] } },
+      } }, { $sort: { tokens: -1 } }]).session(session);
+    const modelRows = await UsageRequest.aggregate([{ $match: { userId, quotaDate: { $gte: from, $lte: today }, status: 'settled', startedAt: { $ne: null } } }, { $group: {
+        _id: '$model', tokens: { $sum: '$chargedTokens' }, requests: { $sum: 1 },
+      } }, { $sort: { tokens: -1 } }, { $limit: 10 }]).session(session);
+    const byDate = new Map(rows.map(row => [row.quotaDate, row]));
+    const trend = Array.from({ length: days }, (_, index) => {
+      const date = shiftDate(from, index);
+      const row = byDate.get(date) as unknown as Record<string, unknown> | undefined;
+      return { date, consumedTokens: count(row ?? null, 'consumedTokens'), reservedTokens: count(row ?? null, 'reservedTokens'), requests: count(row ?? null, 'startedRequests') };
   });
   const todayRow = byDate.get(today) as unknown as Record<string, unknown> | undefined;
   const consumed = count(todayRow ?? null, 'consumedTokens');
   const reserved = count(todayRow ?? null, 'reservedTokens');
   return {
-    timezone: 'Asia/Shanghai', date: today,
+    timezone: 'Asia/Shanghai', date: today, trackingStartedAt: account?.trackingStartedAt ?? null,
     quota: { dailyLimit: limit, consumed, reserved, available: Math.max(0, limit - consumed - reserved), activeRequests: account?.activeRequests ?? 0, maxActiveRequests: MAX_ACTIVE_REQUESTS },
     today: {
       startedRequests: count(todayRow ?? null, 'startedRequests'), successRequests: count(todayRow ?? null, 'successRequests'),
@@ -48,13 +49,14 @@ export async function getUsageOverview(userId: string, days: 7 | 30 = 7) {
     bySource: sourceRows.map(row => ({ source: String(row._id), tokens: Number(row.tokens ?? 0), requests: Number(row.requests ?? 0), estimatedRequests: Number(row.estimated ?? 0) })),
     byModel: modelRows.map(row => ({ model: String(row._id), tokens: Number(row.tokens ?? 0), requests: Number(row.requests ?? 0) })),
   };
+  });
 }
 
 export async function setDailyLimit(userId: string, limit: number) {
   return updateQuota(userId, limit);
 }
 
-export async function listUsageRecords(userId: string, input: { page: number; pageSize: number; source?: string; model?: string; date?: string }) {
+export async function listUsageRecords(userId: string, input: { page: number; pageSize: number; source?: string; model?: string; date?: string; startDate?: string; endDate?: string; outcome?: string }) {
   await ensureUsageReady();
   const filter: Record<string, unknown> = { userId };
   if (input.source) filter.source = input.source;
@@ -63,17 +65,21 @@ export async function listUsageRecords(userId: string, input: { page: number; pa
     if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date)) throw new AppError(400, 40001, '日期格式应为 YYYY-MM-DD');
     filter.quotaDate = input.date;
   }
-  const [items, total] = await Promise.all([
-    UsageRequest.find(filter).sort({ createdAt: -1 }).skip((input.page - 1) * input.pageSize).limit(input.pageSize).lean(),
-    UsageRequest.countDocuments(filter),
-  ]);
-  return {
-    items: items.map(item => ({
-      id: item.requestId, date: item.quotaDate, source: item.source, sourceRef: item.sourceRef, model: item.model,
-      status: item.status, outcome: item.outcome, reservedTokens: item.reservedTokens, chargedTokens: item.chargedTokens,
-      usageSource: item.usageSource, reportedInputTokens: item.reportedInputTokens, reportedOutputTokens: item.reportedOutputTokens,
-      reportedTotalTokens: item.reportedTotalTokens, recovered: item.recovered, errorCode: item.errorCode,
-      createdAt: item.createdAt, finishedAt: item.finishedAt,
-    })), total, page: input.page, pageSize: input.pageSize,
-  };
+  if (!input.date && (input.startDate || input.endDate)) {
+    filter.quotaDate = { ...(input.startDate ? { $gte: input.startDate } : {}), ...(input.endDate ? { $lte: input.endDate } : {}) };
+  }
+  if (input.outcome) filter.outcome = input.outcome;
+  return transaction(async session => {
+    const items = await UsageRequest.find(filter).sort({ createdAt: -1, _id: -1 }).skip((input.page - 1) * input.pageSize).limit(input.pageSize).session(session).lean();
+    const total = await UsageRequest.countDocuments(filter).session(session);
+    return {
+      items: items.map(item => ({
+        id: item.requestId, date: item.quotaDate, source: item.source, sourceRef: item.sourceRef, model: item.model,
+        status: item.status, outcome: item.outcome, reservedTokens: item.reservedTokens, chargedTokens: item.chargedTokens,
+        usageSource: item.usageSource, reportedInputTokens: item.reportedInputTokens, reportedOutputTokens: item.reportedOutputTokens,
+        reportedTotalTokens: item.reportedTotalTokens, recovered: item.recovered, errorCode: item.errorCode,
+        createdAt: item.createdAt, finishedAt: item.finishedAt,
+      })), total, page: input.page, pageSize: input.pageSize,
+    };
+  });
 }

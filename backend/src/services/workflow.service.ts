@@ -305,7 +305,6 @@ const STALE_RUN_GRACE_MS = 10 * 60_000;
 export async function recoverStaleWorkflowRuns(now = new Date()) {
   const stale = await WorkflowRun.find({
     status: "running",
-    executionClaimed: true,
     updatedAt: { $lt: new Date(now.getTime() - STALE_RUN_GRACE_MS) },
   }).limit(50);
   let recovered = 0;
@@ -315,10 +314,11 @@ export async function recoverStaleWorkflowRuns(now = new Date()) {
       interrupted.status = "error";
       interrupted.errorMessage = "执行中断：服务进程可能已退出，可从该步骤重试";
     }
-    run.status = "error";
-    run.finishedAt = now;
-    await run.save();
-    recovered += 1;
+    // 恢复扫描后若执行者有新进展，放弃本次恢复，避免覆盖它刚保存的结果。
+    const result = await WorkflowRun.updateOne({ _id: run._id, status: "running", updatedAt: run.updatedAt }, {
+      $set: { status: "error", finishedAt: now, steps: run.steps },
+    });
+    recovered += result.modifiedCount;
   }
   return recovered;
 }

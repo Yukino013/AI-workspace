@@ -1,23 +1,25 @@
 import { computed, onBeforeUnmount, onMounted, shallowRef } from "vue";
 import {
-  WHALE_STORAGE_KEY,
+  PET_STORAGE_KEY,
+  LEGACY_PET_STORAGE_KEY,
+  type PetAction,
   clampPetPosition,
   petSize,
   readPetPreferences,
   relativePetPosition,
   restorePetPosition,
   type PetPoint,
-} from "@/utils/whale-pet";
+} from "@/utils/dsh-pet";
 
 /** Local-only companion: no AI requests, global pointer listeners, or background timers. */
-export function useWhalePet() {
+export function useDshPet() {
   const viewport = shallowRef({
     width: window.innerWidth,
     height: window.innerHeight,
   });
   let raw: string | null = null;
   try {
-    raw = localStorage.getItem(WHALE_STORAGE_KEY);
+    raw = localStorage.getItem(PET_STORAGE_KEY) ?? localStorage.getItem(LEGACY_PET_STORAGE_KEY);
   } catch {
     /* Private mode: keep session state. */
   }
@@ -29,20 +31,20 @@ export function useWhalePet() {
   );
   const size = computed(() => petSize(viewport.value.width));
   const dragging = shallowRef(false);
-  const delighted = shallowRef(false);
+  const action = shallowRef<PetAction | null>(null);
+  const animationId = shallowRef(0);
   const speaking = shallowRef(false);
   const message = shallowRef(
-    "我是 DeepSeek 大肥鲸。灵感的海很大，我陪你慢慢游。",
+    "Ciallo～我是你的新搭子，今天也一起写点有趣的东西吧。",
   );
   const phrases = [
     "摸到了！今天的快乐，是双倍的。",
-    "别看我圆，装的可都是好点子。",
+    "收到摸摸！给你一个元气满满的回应。",
     "代码可以慢慢写，记得喝口水呀。",
-    "你负责奇思妙想，我负责扑通扑通。",
-    "今天也要给自己一点点「鲸」喜。",
+    "你负责奇思妙想，我负责加油打气。",
+    "今天也要给自己一点点惊喜。",
   ];
   let phrase = 0;
-  let animationTimer: ReturnType<typeof setTimeout> | undefined;
   let gesture: {
     id: number;
     startX: number;
@@ -52,11 +54,12 @@ export function useWhalePet() {
   } | null = null;
   let suppressClick = false;
   let pointerTarget: HTMLElement | null = null;
+  let actionTimeout: ReturnType<typeof setTimeout> | undefined;
 
   function persist() {
     try {
       localStorage.setItem(
-        WHALE_STORAGE_KEY,
+        PET_STORAGE_KEY,
         JSON.stringify({
           visible: visible.value,
           asleep: asleep.value,
@@ -67,12 +70,16 @@ export function useWhalePet() {
       /* Optional preference persistence must never block the workbench. */
     }
   }
-  function animate() {
-    clearTimeout(animationTimer);
-    delighted.value = true;
-    animationTimer = setTimeout(() => {
-      delighted.value = false;
-    }, 1400);
+  function animate(next: PetAction = "wave") {
+    if (actionTimeout) clearTimeout(actionTimeout);
+    action.value = next;
+    animationId.value += 1;
+    actionTimeout = setTimeout(finishAnimation, 3600);
+  }
+  function finishAnimation() {
+    if (actionTimeout) clearTimeout(actionTimeout);
+    actionTimeout = undefined;
+    action.value = null;
   }
   function interact() {
     if (suppressClick) {
@@ -85,22 +92,21 @@ export function useWhalePet() {
       return;
     }
     message.value = phrases[phrase++ % phrases.length]!;
-    animate();
+    animate(phrase % 2 ? "happy" : "wave");
   }
-  function splash() {
+  function bubbles() {
     asleep.value = false;
-    message.value = "噗——送你一朵灵感小水花！";
+    message.value = "啵啵～送你一串灵感泡泡！";
     speaking.value = true;
-    animate();
+    animate("bubbles");
     persist();
   }
   function rest() {
     asleep.value = !asleep.value;
-    clearTimeout(animationTimer);
-    delighted.value = false;
+    finishAnimation();
     message.value = asleep.value
       ? "我先打个盹，不打扰你专心创造。"
-      : "睡饱啦！新的灵感，正在靠岸。";
+      : "睡饱啦！继续陪你写代码。";
     if (!asleep.value) animate();
     persist();
   }
@@ -116,8 +122,7 @@ export function useWhalePet() {
     endGesture();
     visible.value = false;
     speaking.value = false;
-    clearTimeout(animationTimer);
-    delighted.value = false;
+    finishAnimation();
     persist();
   }
   function toggle() {
@@ -148,6 +153,7 @@ export function useWhalePet() {
     if (!gesture.moved && Math.hypot(dx, dy) < 6) return;
     gesture.moved = true;
     dragging.value = true;
+    finishAnimation();
     speaking.value = false;
     position.value = clampPetPosition(
       { x: gesture.origin.x + dx, y: gesture.origin.y + dy },
@@ -195,7 +201,7 @@ export function useWhalePet() {
   onMounted(() => window.addEventListener("resize", resize));
   onBeforeUnmount(() => {
     window.removeEventListener("resize", resize);
-    clearTimeout(animationTimer);
+    finishAnimation();
     endGesture();
   });
   return {
@@ -205,13 +211,15 @@ export function useWhalePet() {
     viewport,
     size,
     dragging,
-    delighted,
+    action,
+    animationId,
+    finishAnimation,
     speaking,
     message,
     toggle,
     hide,
     interact,
-    splash,
+    bubbles,
     rest,
     endGesture,
     onPointerDown,

@@ -40,7 +40,7 @@ const ai = http.createServer(async (req, res) => {
 await new Promise((resolve) => ai.listen(0, "127.0.0.1", resolve));
 const baseUrl = `http://127.0.0.1:${ai.address().port}`;
 Object.assign(process.env, {
-  MONGODB_URI: `mongodb://127.0.0.1:27017/${database}`,
+  MONGODB_URI: process.env.QA_MONGODB_URI || "mongodb://127.0.0.1:27018/?replicaSet=rs0&directConnection=true",
   JWT_SECRET: "isolated-local-qa-only-not-for-production",
   DEEPSEEK_API_KEY: "qa-local-key",
   DEEPSEEK_BASE_URL: baseUrl,
@@ -50,7 +50,9 @@ Object.assign(process.env, {
   ANTHROPIC_BASE_URL: baseUrl,
 });
 const { default: app } = await import("../backend/dist/app.js");
-await mongoose.connect(process.env.MONGODB_URI);
+await mongoose.connect(process.env.MONGODB_URI, { dbName: database });
+const { ensureUsageReady } = await import("../backend/dist/services/usage/quota.service.js");
+await ensureUsageReady();
 const server = await new Promise((resolve) => {
   const instance = app.listen(port, "127.0.0.1", () => resolve(instance));
 });

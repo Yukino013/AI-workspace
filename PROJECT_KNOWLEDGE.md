@@ -123,7 +123,7 @@ Axios 拦截器处理统一响应和 401；SSE 不走 Axios，因为需要读取
 
 - 登录 Token、主题偏好、代码工具草稿等属于浏览器本地状态。
 - 会话、消息、Prompt、调用记录、代码工具执行记录、用户设置属于服务端数据。
-- 主题由 `composables/useTheme.ts` 写入 `localStorage`；鲸鱼桌宠交互由 `useWhalePet.ts` 管理，不作为 MongoDB 业务数据。
+- 主题由 `composables/useTheme.ts` 写入 `localStorage`；Ciallo 桌宠交互由 `useDshPet.ts` 管理，不作为 MongoDB 业务数据。
 
 ## 6. 后端分层与通用知识点
 

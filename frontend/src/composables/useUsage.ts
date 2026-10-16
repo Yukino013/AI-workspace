@@ -5,7 +5,7 @@ export function useUsage() {
   const days = ref<7 | 30>(7);
   const overview = shallowRef<UsageOverview>();
   const records = shallowRef<UsagePage>({ items: [], total: 0, page: 1, pageSize: 20 });
-  const page = ref(1); const source = ref(''); const model = ref(''); const date = ref('');
+  const page = ref(1); const source = ref(''); const model = ref(''); const startDate = ref(''); const endDate = ref(''); const outcome = ref('');
   const loading = ref(false); const recordsLoading = ref(false); const saving = ref(false);
   const error = ref(''); const recordsError = ref('');
   let overviewVersion = 0; let recordsVersion = 0;
@@ -17,8 +17,11 @@ export function useUsage() {
   }
   async function loadRecords() {
     const version = ++recordsVersion; recordsLoading.value = true; recordsError.value = '';
+    if (startDate.value && endDate.value && startDate.value > endDate.value) {
+      recordsError.value = '开始日期不能晚于结束日期。'; recordsLoading.value = false; return;
+    }
     try {
-      const value = await getUsageRecords({ page: page.value, pageSize: 20, source: source.value || undefined, model: model.value || undefined, date: date.value || undefined });
+      const value = await getUsageRecords({ page: page.value, pageSize: 20, source: source.value || undefined, model: model.value || undefined, startDate: startDate.value || undefined, endDate: endDate.value || undefined, outcome: outcome.value || undefined });
       if (version === recordsVersion) records.value = value;
     } catch { if (version === recordsVersion) recordsError.value = '明细加载失败，请重试。'; }
     finally { if (version === recordsVersion) recordsLoading.value = false; }
@@ -32,7 +35,7 @@ export function useUsage() {
   }
   function filterRecords() { if (page.value !== 1) page.value = 1; else void loadRecords(); }
   async function refresh() { await Promise.all([loadOverview(), loadRecords()]); }
-  watch(days, loadOverview); watch(page, loadRecords); watch([source, model, date], filterRecords);
+  watch(days, loadOverview); watch(page, loadRecords); watch([source, model, startDate, endDate, outcome], filterRecords);
   let timer: ReturnType<typeof setInterval> | undefined;
   const onFocus = () => { void refresh(); };
   onMounted(() => {
@@ -40,5 +43,5 @@ export function useUsage() {
     timer = setInterval(() => { if (!document.hidden && !loading.value && !recordsLoading.value) void refresh(); }, 30_000);
   });
   onBeforeUnmount(() => { ++overviewVersion; ++recordsVersion; clearInterval(timer); window.removeEventListener('focus', onFocus); });
-  return { days, overview, records, page, source, model, date, loading, recordsLoading, saving, error, recordsError, saveQuota, refresh, loadRecords };
+  return { days, overview, records, page, source, model, startDate, endDate, outcome, loading, recordsLoading, saving, error, recordsError, saveQuota, refresh, loadRecords };
 }

@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed, nextTick, shallowRef, useId, watch } from "vue";
-import { useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import AppIcon from "@/components/common/AppIcon.vue";
-import { useWhalePet } from "@/composables/useWhalePet";
-import WhaleAvatar from "./WhaleAvatar.vue";
+import { useDshPet } from "@/composables/useDshPet";
+import DshAvatar from "./DshAvatar.vue";
 
 const props = defineProps<{ suspended?: boolean }>();
 const emit = defineEmits<{ hide: [] }>();
+const route = useRoute();
 const router = useRouter();
 const petButton = shallowRef<HTMLButtonElement>();
 const id = useId();
@@ -17,20 +18,22 @@ const {
   viewport,
   size,
   dragging,
-  delighted,
+  action,
+  animationId,
+  finishAnimation,
   speaking,
   message,
   toggle,
   hide,
   interact,
-  splash,
+  bubbles,
   rest,
   endGesture,
   onPointerDown,
   onPointerMove,
   onPointerEnd,
   onKeydown,
-} = useWhalePet();
+} = useDshPet();
 
 // Fixed positioning keeps the speech bubble inside the viewport even at the drag boundaries.
 const bubbleStyle = computed(() => {
@@ -82,7 +85,10 @@ async function togglePet() {
 }
 async function chat() {
   closeBubble();
-  await router.push("/chat");
+  await router.push({
+    path: "/chat",
+    query: { ...route.query, fromPet: String(Date.now()) },
+  });
 }
 defineExpose({ toggle: togglePet, visible });
 </script>
@@ -90,7 +96,7 @@ defineExpose({ toggle: togglePet, visible });
 <template>
   <section
     v-show="visible && !suspended"
-    class="whale-pet"
+    class="dsh-pet"
     :class="{ 'is-dragging': dragging }"
     :style="{
       left: `${position.x}px`,
@@ -98,12 +104,12 @@ defineExpose({ toggle: togglePet, visible });
       width: `${size.width}px`,
       height: `${size.height}px`,
     }"
-    aria-label="DeepSeek 大肥鲸桌宠"
+    aria-label="Ciallo桌宠"
     @keydown.esc.stop.prevent="escape"
   >
     <button
       class="pet-hide"
-      aria-label="收起鲸鱼桌宠"
+      aria-label="收起Ciallo 桌宠"
       title="收起桌宠，可从顶栏唤回"
       @click="dismiss"
     >
@@ -112,7 +118,12 @@ defineExpose({ toggle: togglePet, visible });
     <button
       ref="petButton"
       class="pet-body"
-      aria-label="摸摸 DeepSeek 大肥鲸"
+      :class="{
+        'is-asleep': asleep,
+        'is-action': !!action,
+        'is-dragging': dragging,
+      }"
+      aria-label="摸摸 Ciallo"
       :aria-describedby="`${id}-instructions`"
       :aria-expanded="speaking"
       :aria-controls="`${id}-bubble`"
@@ -124,16 +135,27 @@ defineExpose({ toggle: togglePet, visible });
       @click="interact"
       @keydown="onKeydown"
     >
-      <WhaleAvatar :asleep="asleep" :delighted="delighted" />
+      <DshAvatar
+        :animation="dragging ? 'drag' : asleep ? 'sleep' : action ?? 'idle'"
+        :animation-id="animationId"
+        :active="visible && !suspended"
+        @finished="finishAnimation"
+      />
+      <span
+        v-if="action === 'bubbles'"
+        class="pet-bubbles"
+        aria-hidden="true"
+        ><i /><i /><i /><i /></span>
+      <span v-if="asleep" class="pet-sleep-mark" aria-hidden="true">Zzz</span>
     </button>
     <span class="pet-name"
-      ><span class="pet-status" :class="{ 'is-asleep': asleep }" />DeepSeek<span
+      ><span class="pet-status" :class="{ 'is-asleep': asleep }" />Ciallo<span
         class="pet-name-divider"
         >/</span
-      >大肥鲸</span
+        >{{ asleep ? "休息中" : "小搭子" }}</span
     >
     <span :id="`${id}-instructions`" class="pet-sr-only"
-      >点击互动，拖动移动。聚焦鲸鱼后用方向键移动，Shift 加方向键加速，Escape
+      >点击互动，拖动移动。聚焦桌宠后用方向键移动，Shift 加方向键加速，Escape
       关闭气泡或收起。</span
     >
     <div
@@ -146,16 +168,16 @@ defineExpose({ toggle: togglePet, visible });
         <span class="bubble-eyebrow">YOUR LITTLE COMPANION</span
         ><button
           class="bubble-close"
-          aria-label="关闭鲸鱼气泡"
+          aria-label="关闭桌宠气泡"
           @click="closeBubble"
         >
           <AppIcon name="close" :size="14" />
         </button>
       </div>
-      <strong class="bubble-title">一小只鲸，陪你造浪。</strong>
+      <strong class="bubble-title">Ciallo～今天也一起加油。</strong>
       <p role="status" aria-live="polite">{{ message }}</p>
       <div class="bubble-actions">
-        <button class="splash-action" @click="splash">
+        <button class="splash-action" @click="bubbles">
           <svg
             viewBox="0 0 16 16"
             width="14"
@@ -173,7 +195,7 @@ defineExpose({ toggle: togglePet, visible });
               stroke="currentColor"
               stroke-linecap="round"
             /></svg
-          >喷水
+          >吐泡泡
         </button>
         <button @click="rest">
           <AppIcon :name="asleep ? 'sun' : 'moon'" :size="14" />{{
@@ -181,7 +203,7 @@ defineExpose({ toggle: togglePet, visible });
           }}
         </button>
         <button @click="chat">
-          去聊聊<AppIcon name="arrow-up-right" :size="14" />
+          打开 AI 对话<AppIcon name="arrow-up-right" :size="14" />
         </button>
       </div>
       <span class="bubble-hint">拖动我，找个喜欢的位置</span>
@@ -190,7 +212,7 @@ defineExpose({ toggle: togglePet, visible });
 </template>
 
 <style scoped>
-.whale-pet {
+.dsh-pet {
   position: fixed;
   z-index: 40;
   display: flex;
@@ -199,6 +221,7 @@ defineExpose({ toggle: togglePet, visible });
   user-select: none;
 }
 .pet-body {
+  position: relative;
   display: block;
   width: 100%;
   flex: 1;
@@ -214,8 +237,64 @@ defineExpose({ toggle: togglePet, visible });
 .is-dragging .pet-body {
   cursor: grabbing;
 }
-.is-dragging :deep(.whale-art *) {
-  animation-play-state: paused;
+.pet-body.is-action {
+  animation: pet-action-bounce 0.72s ease-in-out infinite;
+}
+.pet-body.is-asleep {
+  animation: pet-sleep-breathe 2.8s ease-in-out infinite;
+  cursor: pointer;
+}
+.pet-bubbles {
+  position: absolute;
+  inset: 12% 8% 4%;
+  overflow: hidden;
+  pointer-events: none;
+}
+.pet-bubbles i {
+  position: absolute;
+  bottom: 12%;
+  width: 12px;
+  height: 12px;
+  border: 1px solid #9de8ff;
+  border-radius: 50%;
+  background: #c8f4ff78;
+  box-shadow: inset -2px -2px 4px #71c8ed55;
+  animation: pet-bubble-rise 1.2s ease-out infinite;
+}
+.pet-bubbles i:nth-child(1) {
+  left: 26%;
+}
+.pet-bubbles i:nth-child(2) {
+  left: 48%;
+  width: 9px;
+  height: 9px;
+  animation-delay: 0.3s;
+}
+.pet-bubbles i:nth-child(3) {
+  left: 68%;
+  width: 15px;
+  height: 15px;
+  animation-delay: 0.6s;
+}
+.pet-bubbles i:nth-child(4) {
+  left: 39%;
+  width: 7px;
+  height: 7px;
+  animation-delay: 0.9s;
+}
+.pet-sleep-mark {
+  position: absolute;
+  top: 12%;
+  right: 11%;
+  padding: 2px 6px;
+  border: 1px solid var(--app-line);
+  border-radius: 12px;
+  background: var(--app-bg);
+  color: var(--app-muted);
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1.2;
+  animation: pet-sleep-float 1.8s ease-in-out infinite;
 }
 .pet-name {
   display: flex;
@@ -261,8 +340,8 @@ defineExpose({ toggle: togglePet, visible });
   transition: opacity 0.15s;
   cursor: pointer;
 }
-.whale-pet:hover .pet-hide,
-.whale-pet:focus-within .pet-hide {
+.dsh-pet:hover .pet-hide,
+.dsh-pet:focus-within .pet-hide {
   opacity: 1;
 }
 .pet-bubble {
@@ -322,7 +401,7 @@ defineExpose({ toggle: togglePet, visible });
   justify-content: center;
   gap: 4px;
   flex: 1;
-  min-height: 32px;
+  min-height: 40px;
   padding: 0 6px;
   border: 1px solid var(--app-line);
   border-radius: 9px;
@@ -349,7 +428,7 @@ defineExpose({ toggle: togglePet, visible });
   font-size: 9px;
   color: var(--app-muted);
 }
-.whale-pet button:focus-visible {
+.dsh-pet button:focus-visible {
   outline: 2px solid var(--el-color-primary);
   outline-offset: 3px;
 }
@@ -374,12 +453,58 @@ defineExpose({ toggle: togglePet, visible });
     gap: 4px;
   }
   .bubble-actions button {
-    min-height: 38px;
+    min-height: 44px;
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .whale-pet * {
+  .dsh-pet * {
     transition: none !important;
+    animation: none !important;
+  }
+}
+@keyframes pet-action-bounce {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0);
+  }
+  35% {
+    transform: translateY(-7px) rotate(-2deg);
+  }
+  70% {
+    transform: translateY(1px) rotate(2deg);
+  }
+}
+@keyframes pet-sleep-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(0.97, 0.99);
+  }
+}
+@keyframes pet-bubble-rise {
+  0% {
+    opacity: 0;
+    transform: translateY(0) scale(0.65);
+  }
+  20% {
+    opacity: 0.9;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-100px) scale(1.2);
+  }
+}
+@keyframes pet-sleep-float {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: translateY(2px);
+  }
+  50% {
+    opacity: 1;
+    transform: translateY(-8px);
   }
 }
 </style>

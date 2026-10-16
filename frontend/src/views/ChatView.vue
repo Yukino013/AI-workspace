@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { nextTick, shallowRef, watch } from "vue";
 import { ElScrollbar } from "element-plus";
+import { useRoute, useRouter } from "vue-router";
 import { useConversations } from "@/composables/useConversations";
 import ChatWelcome from "@/components/chat/ChatWelcome.vue";
 import ChatComposer from "@/components/chat/ChatComposer.vue";
@@ -8,6 +9,8 @@ import ChatMessage from "@/components/ChatMessage.vue";
 import ConversationSidebar from "@/components/chat/ConversationSidebar.vue";
 import AppIcon from "@/components/common/AppIcon.vue";
 import LoadError from "@/components/common/LoadError.vue";
+const route = useRoute();
+const router = useRouter();
 const {
   conversations,
   active,
@@ -54,6 +57,23 @@ watch(
   () => active.value?.id,
   () => {
     followOutput.value = true;
+  },
+);
+watch(
+  () => route.query.fromPet,
+  async (request) => {
+    if (request === undefined || request === null) return;
+    await load();
+    if (error.value) return;
+    if (!active.value) await newChat();
+    if (active.value) {
+      await nextTick();
+      composer.value?.focus();
+    }
+    await router.replace({
+      path: "/chat",
+      query: { ...route.query, fromPet: undefined },
+    });
   },
 );
 function onKeydown(event: KeyboardEvent) {

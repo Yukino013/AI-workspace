@@ -24,6 +24,7 @@ export function withUsageOperation(handler: (req: Request, res: Response) => Pro
     const hash = payloadHash(req);
     const resourceKey = resource?.(req) ?? `operation:${key}`;
     let operationId: string | undefined;
+    let heartbeat: ReturnType<typeof setInterval> | undefined;
     try {
       await ensureUsageReady();
       const doc = await UsageOperation.create({
@@ -32,6 +33,13 @@ export function withUsageOperation(handler: (req: Request, res: Response) => Pro
         active: true, expiresAt: new Date(Date.now() + REQUEST_TIMEOUT_MS + 60_000),
       });
       operationId = String(doc._id);
+      // 工作流可能包含多个顺序步骤，活跃 HTTP 操作续租，防止步骤未完成就被恢复任务解锁。
+      heartbeat = setInterval(() => {
+        void UsageOperation.updateOne({ _id: operationId, active: true }, {
+          $set: { expiresAt: new Date(Date.now() + REQUEST_TIMEOUT_MS + 60_000) },
+        }).catch(() => console.error('Usage operation heartbeat failed'));
+      }, 60_000);
+      heartbeat.unref();
       req.headers['idempotency-key'] = key;
       await handler(req, res);
     } catch (error) {
@@ -46,6 +54,7 @@ export function withUsageOperation(handler: (req: Request, res: Response) => Pro
       if (error instanceof AppError) return next(error);
       return next(error);
     } finally {
+      clearInterval(heartbeat);
       if (operationId) {
         await UsageOperation.updateOne({ _id: operationId }, { $set: { active: false, expiresAt: new Date() } }).catch((error) => {
           console.error('Usage operation release failed', error instanceof Error ? error.name : 'unknown');

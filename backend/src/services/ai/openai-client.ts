@@ -95,6 +95,7 @@ interface UpstreamStreamPayload {
       reasoning?: string;
     };
   }>;
+  error?: unknown;
   usage?: { prompt_tokens?: unknown; completion_tokens?: unknown; total_tokens?: unknown };
 }
 
@@ -128,7 +129,8 @@ export function createOpenAIAdapter(name: string, cfg: AdapterConfig): AIAdapter
     });
 
     if (!res.ok) {
-      throw new AppError(502, 50000, `${name} 调用失败（HTTP ${res.status}）：${await res.text()}`);
+      await res.body?.cancel().catch(() => undefined);
+      throw new AppError(502, 50000, `${name} 调用失败（HTTP ${res.status}），请检查 Provider 配置或稍后重试`);
     }
 
     const data = await res.json();
@@ -158,8 +160,8 @@ export function createOpenAIAdapter(name: string, cfg: AdapterConfig): AIAdapter
     });
 
     if (!res.ok || !res.body) {
-      const detail = await res.text().catch(() => "");
-      throw new AppError(502, 50000, `${name} 调用失败（HTTP ${res.status}）：${detail}`);
+      await res.body?.cancel().catch(() => undefined);
+      throw new AppError(502, 50000, `${name} 调用失败（HTTP ${res.status}），请检查 Provider 配置或稍后重试`);
     }
 
     const reader = res.body.getReader();
@@ -177,7 +179,7 @@ export function createOpenAIAdapter(name: string, cfg: AdapterConfig): AIAdapter
       }
 
       const json = parseStreamPayload(data);
-      if (!json) return [];
+      if (!json || json.error) throw new AppError(502, 50000, `${name} 返回异常流数据，请重试`);
 
       const events: StreamEvent[] = [];
       const delta = json.choices?.[0]?.delta;
@@ -195,33 +197,40 @@ export function createOpenAIAdapter(name: string, cfg: AdapterConfig): AIAdapter
       return events;
     };
 
-    while (!upstreamDone) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-
-      // 同时兼容 LF 与 CRLF；最后一段不完整事件保留到下一次读取。
-      const events = buffer.split(/\r?\n\r?\n/);
-      buffer = events.pop() ?? "";
-
-      for (const event of events) {
-        for (const parsed of consumeEvent(event)) {
+    try {
+      while (!upstreamDone) {
+        const { done, value } = await reader.read();
+        if (done) break;
+  
+        buffer += decoder.decode(value, { stream: true });
+  
+        // 同时兼容 LF 与 CRLF；最后一段不完整事件保留到下一次读取。
+        const events = buffer.split(/\r?\n\r?\n/);
+        buffer = events.pop() ?? "";
+  
+        for (const event of events) {
+          for (const parsed of consumeEvent(event)) {
+            yield parsed;
+          }
+          if (upstreamDone) break;
+        }
+      }
+  
+      // 某些兼容服务会直接关闭连接而不补最后一个空行，仍需消费流尾事件。
+      buffer += decoder.decode();
+      if (!upstreamDone && buffer.trim()) {
+        for (const parsed of consumeEvent(buffer)) {
           yield parsed;
         }
-        if (upstreamDone) break;
       }
+  
+      signal.throwIfAborted();
+      if (!upstreamDone) throw new AppError(502, 50000, `${name} 响应意外中断，请重试`);
+      yield { type: "done", usage };
+    } finally {
+      await reader.cancel().catch(() => undefined);
+      reader.releaseLock();
     }
-
-    // 某些兼容服务会直接关闭连接而不补最后一个空行，仍需消费流尾事件。
-    buffer += decoder.decode();
-    if (!upstreamDone && buffer.trim()) {
-      for (const parsed of consumeEvent(buffer)) {
-        yield parsed;
-      }
-    }
-
-    yield { type: "done", usage };
   }
 
   return { chat, stream };

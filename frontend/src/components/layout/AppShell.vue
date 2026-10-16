@@ -7,8 +7,8 @@ import { useTheme } from "@/composables/useTheme";
 import AppIcon from "@/components/common/AppIcon.vue";
 import BrandMark from "@/components/common/BrandMark.vue";
 import CommandPalette from "./CommandPalette.vue";
-import WhalePet from "@/components/pet/WhalePet.vue";
-import WhaleAvatar from "@/components/pet/WhaleAvatar.vue";
+import DshPet from "@/components/pet/DshPet.vue";
+import DshAvatar from "@/components/pet/DshAvatar.vue";
 import { workspaceLinks as links } from "@/utils/navigation";
 const auth = useAuthStore();
 const route = useRoute();
@@ -19,8 +19,8 @@ const media = matchMedia("(max-width: 760px)");
 const isMobile = shallowRef(media.matches);
 const sidebar = shallowRef<HTMLElement>();
 const menuButton = shallowRef<HTMLButtonElement>();
-const whalePet = shallowRef<InstanceType<typeof WhalePet>>();
-const whaleToggle = shallowRef<HTMLButtonElement>();
+const dshPet = shallowRef<InstanceType<typeof DshPet>>();
+const petToggle = shallowRef<HTMLButtonElement>();
 function resize() {
   isMobile.value = media.matches;
   if (!media.matches) mobileOpen.value = false;
@@ -210,14 +210,14 @@ async function logout() {
         </div>
         <div class="topbar-actions">
           <button
-            ref="whaleToggle"
-            class="icon-button whale-toggle"
-            aria-label="显示或收起鲸鱼桌宠"
-            title="DeepSeek 大肥鲸"
-            :aria-pressed="whalePet?.visible ?? false"
-            @click="whalePet?.toggle()"
+            ref="petToggle"
+            class="icon-button pet-toggle"
+            aria-label="显示或收起 Ciallo 桌宠"
+            title="显示或收起 Ciallo 桌宠"
+            :aria-pressed="dshPet?.visible ?? false"
+            @click="dshPet?.toggle()"
           >
-            <WhaleAvatar :animated="false" />
+            <DshAvatar static />
           </button>
           <button
             class="quick-search"
@@ -257,10 +257,10 @@ async function logout() {
       </main>
     </div>
     <CommandPalette v-model="commandOpen" />
-    <WhalePet
-      ref="whalePet"
+    <DshPet
+      ref="dshPet"
       :suspended="mobileOpen || commandOpen"
-      @hide="whaleToggle?.focus()"
+      @hide="petToggle?.focus()"
     />
   </div>
 </template>
@@ -494,11 +494,11 @@ kbd {
   align-items: center;
   gap: 4px;
 }
-.whale-toggle :deep(.whale-art) {
+.pet-toggle :deep(.dsh-avatar) {
   width: 30px;
   height: 28px;
 }
-.whale-toggle[aria-pressed="true"] {
+.pet-toggle[aria-pressed="true"] {
   background: var(--el-color-primary-light-9);
 }
 .quick-search {

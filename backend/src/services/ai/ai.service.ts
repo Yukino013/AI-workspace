@@ -59,6 +59,7 @@ export const AIService = {
     const ticket = prepared ?? await prepareAICall(params, context); checkTicket(ticket, context);
     const linked = linkedSignal(params.signal); let started = false; let usage: TokenUsage | undefined;
     try {
+      linked.signal.throwIfAborted();
       await startAttempt(ticket.requestId);
       started = true;
       linked.signal.throwIfAborted();

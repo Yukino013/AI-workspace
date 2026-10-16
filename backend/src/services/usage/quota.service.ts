@@ -90,6 +90,8 @@ export async function settle(requestId: string, outcome: 'success' | 'error' | '
   return transaction(async session => {
     const record = await UsageRequest.findOne({ requestId }).session(session);
     if (!record || record.status === 'settled') return;
+    // 未取得执行权的调用只能释放尚未启动的预占，不能结算另一个执行者的流水。
+    if (outcome === 'not_sent' && record.status !== 'reserved') return;
     await lockAccount(record.userId, session);
     const wasStarted = record.status === 'running';
     const actualOutcome = wasStarted ? (outcome === 'not_sent' ? 'error' : outcome) : 'not_sent';

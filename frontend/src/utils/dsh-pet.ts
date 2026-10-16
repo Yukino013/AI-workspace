@@ -1,4 +1,7 @@
-export const WHALE_STORAGE_KEY = "ai-workbench:whale-pet:v1";
+export const PET_STORAGE_KEY = "ai-workbench:dsh-pet:v1";
+export const LEGACY_PET_STORAGE_KEY = "ai-workbench:whale-pet:v1";
+export type PetAction = "happy" | "wave" | "bubbles";
+export type PetAnimation = "idle" | "sleep" | "drag" | PetAction;
 export const PET_MARGIN = 12;
 export interface PetPoint {
   x: number;
@@ -16,8 +19,8 @@ export interface PetPreferences {
 
 export function petSize(width: number): PetViewport {
   return width <= 760
-    ? { width: 112, height: 116 }
-    : { width: 156, height: 150 };
+    ? { width: 132, height: 154 }
+    : { width: 176, height: 198 };
 }
 
 export function petBounds(viewport: PetViewport) {

@@ -10,7 +10,11 @@ const recordsQuery = z.object({
   source: z.enum(['prompt', 'conversation', 'code_tool', 'workflow']).optional(),
   model: z.string().min(1).max(100).optional(),
   date: z.iso.date().optional(),
-});
+  startDate: z.iso.date().optional(),
+  endDate: z.iso.date().optional(),
+  outcome: z.enum(['success', 'error', 'cancelled', 'not_sent']).optional(),
+}).refine(value => !(value.date && (value.startDate || value.endDate)), '单日与日期范围不能同时使用')
+  .refine(value => !value.startDate || !value.endDate || value.startDate <= value.endDate, '开始日期不能晚于结束日期');
 export async function overview(req: Request, res: Response) {
   const query = overviewQuery.safeParse(req.query);
   if (!query.success) throw new AppError(400, 40001, '统计天数仅支持 7 或 30');

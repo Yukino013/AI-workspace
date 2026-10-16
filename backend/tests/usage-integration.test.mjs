@@ -295,3 +295,82 @@ test('额度拒绝不会写入任何流水，未鉴权用户无法读取他人�
   assert.equal((await daily(userId)).reservedTokens, 0);
   assert.equal((await account(userId)).activeRequests, 0);
 });
+
+test('重复领取运行中的凭证不会替原执行者结算', async () => {
+  for (const mode of ['chat', 'stream']) {
+    const userId = user();
+    const params = { model: AI_MODELS.DEEPSEEK, messages: [{ role: 'user', content: 'hello' }] };
+    const metering = context(userId, `running-ticket-${mode}`);
+    const ticket = await AIService.prepare(params, metering);
+    await startAttempt(ticket.requestId);
+    const original = await record(ticket.requestId);
+    await assert.rejects(async () => {
+      if (mode === 'chat') await AIService.chat(params, metering, ticket);
+      else for await (const _ of AIService.stream(params, new AbortController().signal, metering, ticket)) {}
+    }, error => code(error) === 40901);
+    assert.equal((await record(ticket.requestId)).status, 'running');
+    assert.equal((await daily(userId)).reservedTokens, original.reservedTokens);
+    assert.equal((await account(userId)).activeRequests, 1);
+    await settle(ticket.requestId, 'success', usage(10, 5));
+    assert.equal((await daily(userId)).consumedTokens, 15);
+    assert.equal((await account(userId)).activeRequests, 0);
+  }
+});
+
+test('发送前取消不产生调用次数或扣额，两种调用方式一致', async () => {
+  for (const mode of ['chat', 'stream']) {
+    const userId = user();
+    const controller = new AbortController();
+    const params = { model: AI_MODELS.DEEPSEEK, messages: [{ role: 'user', content: 'hello' }], signal: controller.signal };
+    const metering = context(userId, `pre-abort-${mode}`);
+    const ticket = await AIService.prepare(params, metering);
+    controller.abort();
+    await assert.rejects(async () => {
+      if (mode === 'chat') await AIService.chat(params, metering, ticket);
+      else for await (const _ of AIService.stream(params, controller.signal, metering, ticket)) {}
+    }, { name: 'AbortError' });
+    assert.equal((await record(ticket.requestId)).outcome, 'not_sent');
+    assert.equal((await daily(userId)).startedRequests, 0);
+    assert.equal((await daily(userId)).consumedTokens, 0);
+    assert.equal((await account(userId)).activeRequests, 0);
+  }
+});
+
+test('概览在并发结算和额度调整期间保持快照一致', async () => {
+  const userId = user();
+  const writer = (async () => {
+    for (let index = 0; index < 8; index++) {
+      await updateQuota(userId, 5000 + index * 100);
+      const ticket = await reserve(context(userId, `snapshot-${index}`), 300);
+      await startAttempt(ticket.requestId);
+      await settle(ticket.requestId, 'success', usage(20, 10));
+    }
+  })();
+  for (let index = 0; index < 12; index++) {
+    const snapshot = await getUsageOverview(userId);
+    assert.ok(snapshot.trackingStartedAt);
+    assert.equal(snapshot.quota.consumed, snapshot.trend.at(-1).consumedTokens);
+    assert.equal(snapshot.quota.consumed, snapshot.bySource.reduce((sum, row) => sum + row.tokens, 0));
+    assert.equal(snapshot.quota.consumed, snapshot.byModel.reduce((sum, row) => sum + row.tokens, 0));
+    assert.equal(snapshot.quota.reserved > 0, snapshot.quota.activeRequests > 0);
+    assert.equal(snapshot.quota.available, Math.max(0, snapshot.quota.dailyLimit - snapshot.quota.consumed - snapshot.quota.reserved));
+  }
+  await writer;
+});
+
+test('明细支持日期范围、结果组合及稳定分页且不泄漏内部字段', async () => {
+  const userId = user();
+  for (const outcome of ['success', 'error']) {
+    const ticket = await reserve(context(userId, `filter-${outcome}`), 200);
+    await startAttempt(ticket.requestId);
+    await settle(ticket.requestId, outcome, usage(10, 10));
+  }
+  const today = quotaDate();
+  const page = await listUsageRecords(userId, { page: 1, pageSize: 1, startDate: today, endDate: today, outcome: 'error', source: 'prompt', model: AI_MODELS.DEEPSEEK });
+  assert.equal(page.total, 1);
+  assert.equal(page.items[0].outcome, 'error');
+  assert.equal(page.items[0].operationKey, undefined);
+  assert.equal(page.items[0].userId, undefined);
+  const empty = await listUsageRecords(userId, { page: 1, pageSize: 20, endDate: '2000-01-01' });
+  assert.equal(empty.total, 0);
+});

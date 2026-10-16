@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 
 const bundle = await build({
   entryPoints: [
-    fileURLToPath(new URL("../src/utils/whale-pet.ts", import.meta.url)),
+    fileURLToPath(new URL("../src/utils/dsh-pet.ts", import.meta.url)),
   ],
   bundle: true,
   write: false,
@@ -23,7 +23,7 @@ const {
   `data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].text).toString("base64")}`
 );
 
-test("whale defaults visible on desktop, hidden on compact screens", () => {
+test("pet defaults visible on desktop, hidden on compact screens", () => {
   assert.deepEqual(readPetPreferences(null, false), {
     visible: true,
     asleep: false,
@@ -34,8 +34,8 @@ test("whale defaults visible on desktop, hidden on compact screens", () => {
     asleep: false,
     position: null,
   });
-  assert.equal(petSize(760).width, 112);
-  assert.equal(petSize(761).width, 156);
+  assert.equal(petSize(760).width, 132);
+  assert.equal(petSize(761).width, 176);
 });
 test("invalid or obsolete stored preferences never block the app", () => {
   for (const raw of ["{oops", "null", "[]", "false", "7", '"text"']) {

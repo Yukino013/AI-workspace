@@ -21,7 +21,7 @@ let server;
 let base;
 
 before(async () => {
-  await mongoose.connect('mongodb://127.0.0.1:27017', { dbName: database, serverSelectionTimeoutMS: 3000 });
+  await mongoose.connect(process.env.TEST_MONGODB_URI ?? 'mongodb://127.0.0.1:27017', { dbName: database, serverSelectionTimeoutMS: 3000 });
   await User.init();
   server = app.listen(0, '127.0.0.1');
   await new Promise((resolve, reject) => { server.once('listening', resolve); server.once('error', reject); });
