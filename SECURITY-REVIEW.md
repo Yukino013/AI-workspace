@@ -1,20 +1,20 @@
-# Security Review Summary
+# 安全审查摘要
 
-**Date:** 2026-10-16  
-**Scope:** Tracked source and reachable Git history for the public `main` branch.
+**日期：** 2026-10-16
+**范围：** 公开 `main` 分支中已跟踪的源代码及可访问的 Git 历史。
 
-## Findings
+## 发现
 
-### MEDIUM — Public development JWT signing fallback
+### 中危 — 使用公开的开发环境 JWT 签名密钥作为回退值
 
-- **Location:** `backend/src/config/jwt-secret.ts:1,15–16`
-- **Confidence:** 8/10
-- **Finding:** When `JWT_SECRET` is unset and `NODE_ENV` is anything other than exactly `production`, the application falls back to a hard-coded development signing secret. Since that value is present in public Git history, a deployment that omits its environment configuration could use a signing key known to the public. An attacker able to construct claims could then forge JWTs accepted by that deployment.
-- **History:** The fallback is present in the current public `main` history. The local `main` HEAD matched the public branch at the time of review.
-- **Recommendation:** Use the fallback only in an explicit development mode. Fail startup when the environment is unset or unsupported, and require a securely generated `JWT_SECRET` for deployed environments.
+- **位置：** `backend/src/config/jwt-secret.ts:1,15–16`
+- **置信度：** 8/10
+- **问题：** 如果未设置 `JWT_SECRET`，且 `NODE_ENV` 不严格等于 `production`，应用就会回退使用硬编码的开发环境签名密钥。该密钥已存在于公开的 Git 历史中，因此部署时若遗漏环境配置，服务可能使用公众已知的密钥签发和验证令牌。攻击者若能构造相应的声明，就可能伪造该服务接受的 JWT。
+- **历史记录：** 当前公开 `main` 分支的历史中包含此回退密钥。审查时，本地 `main` 的 HEAD 与公开分支一致。
+- **建议：** 仅在明确指定的开发模式下使用回退值。若运行环境未设置或不受支持，应在启动时失败；部署环境必须配置安全随机生成的 `JWT_SECRET`。
 
-## Exposure assessment
+## 信息泄露检查
 
-No likely real provider/API credentials, private-key files, or tracked environment files containing credentials were found in the reviewed reachable history. Environment examples and placeholders are not treated as live credentials.
+在本次检查的可访问 Git 历史中，未发现疑似真实有效的模型服务/API 凭证、私钥文件或包含凭证的已跟踪环境配置文件。环境配置示例和占位值不视为有效凭证。
 
-Ignored local files such as `.env` files, uploads, and build output are not tracked in the reviewed history. This review does not cover deleted or unreachable Git refs, forks, release attachments, external logs, or artifacts.
+本地被 Git 忽略的文件（例如 `.env` 文件）、上传文件和构建产物不在已跟踪历史中。本次审查不涵盖已删除或不可访问的 Git 引用、其他 fork、发布附件、外部日志或其他构建产物。
