@@ -9,7 +9,7 @@ export interface ChatPayload {
 
 /** 非流式：一次性返回完整结果 */
 export function sendChat(payload: ChatPayload): Promise<ChatRecord> {
-  return http.post("/chat", payload);
+  return http.post("/chat", payload, { timeout: 200000, headers: { "Idempotency-Key": crypto.randomUUID() } });
 }
 
 export function getChatRecords(params: { page?: number; pageSize?: number }): Promise<PageResult<ChatRecord>> {

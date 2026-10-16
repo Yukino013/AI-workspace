@@ -4,6 +4,8 @@ import { randomUUID } from "node:crypto";
 import mongoose from "mongoose";
 
 const database = `ai-workbench-workflow-test-${randomUUID()}`;
+// 生成类接口一律先经过额度预占，需要多文档事务，因此测试库必须连副本集
+const uri = process.env.USAGE_TEST_MONGO_URI ?? "mongodb://127.0.0.1:27018/?replicaSet=rs0&directConnection=true";
 process.env.JWT_SECRET = randomUUID() + randomUUID();
 process.env.JWT_EXPIRES_IN = "1h";
 process.env.DEEPSEEK_API_KEY = "workflow-test-key";
@@ -17,7 +19,7 @@ let token;
 let otherToken;
 
 before(async () => {
-  await mongoose.connect("mongodb://127.0.0.1:27017", { dbName: database, serverSelectionTimeoutMS: 3000 });
+  await mongoose.connect(uri, { dbName: database, serverSelectionTimeoutMS: 5000 });
   await Promise.all([Prompt.init(), Workflow.init(), WorkflowRun.init()]);
   server = app.listen(0, "127.0.0.1");
   await new Promise((resolve, reject) => { server.once("listening", resolve); server.once("error", reject); });

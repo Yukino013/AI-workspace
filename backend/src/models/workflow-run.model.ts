@@ -48,6 +48,7 @@ const workflowRunSchema = new Schema(
       default: "running",
     },
     steps: { type: [workflowRunStepSchema], required: true },
+    executionClaimed: { type: Boolean, default: false },
     startedAt: { type: Date, required: true, default: Date.now },
     finishedAt: { type: Date, default: null },
   },

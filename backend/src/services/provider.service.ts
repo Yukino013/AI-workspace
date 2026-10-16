@@ -53,7 +53,8 @@ export async function saveProviders(userId: string, values: Partial<Record<Provi
 }
 
 export async function getApiKeyForModel(userId: string, model: string) {
-  const provider = (Object.keys(providerMeta) as ProviderKey[]).find((id) => providerMeta[id].model === model);
+  const canonicalModel = model === AI_MODELS.DEEPSEEK_LEGACY ? AI_MODELS.DEEPSEEK : model;
+  const provider = (Object.keys(providerMeta) as ProviderKey[]).find((id) => providerMeta[id].model === canonicalModel);
   if (!provider) return undefined;
   const user = await User.findById(userId).select(`+${keyFields[provider]}`);
   if (!user) throw new AppError(404, 40401, '用户不存在');

@@ -5,4 +5,4 @@ export const createConversation = (model: string): Promise<Conversation> => http
 export const getConversation = (id: string): Promise<ConversationDetail> => http.get(`/conversations/${id}`);
 export const updateConversation = (id: string, model: string): Promise<Conversation> => http.patch(`/conversations/${id}`, { model });
 export const deleteConversation = (id: string): Promise<null> => http.delete(`/conversations/${id}`);
-export const sendConversationMessage = (id: string, content: string) => http.post(`/conversations/${id}/messages`, { content });
+export const sendConversationMessage = (id: string, content: string) => http.post(`/conversations/${id}/messages`, { content }, { timeout: 200000, headers: { "Idempotency-Key": crypto.randomUUID() } });

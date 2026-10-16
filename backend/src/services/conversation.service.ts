@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import { ChatSession } from "../models/chat-session.model.js";
 import { ChatMessage } from "../models/chat-message.model.js";
+import { settle } from "./usage/quota.service.js";
 import { AIService } from "./ai/ai.service.js";
 import { getApiKeyForModel } from "./provider.service.js";
 import { AppError } from "../utils/AppError.js";
@@ -49,32 +50,37 @@ async function owned(userId: string, id: string) {
   return session;
 }
 
-export async function prepareMessage(userId: string, id: string, content: string) {
+export async function prepareMessage(userId: string, id: string, content: string, operationKey?: string) {
   const session = await owned(userId, id);
   const previous = await ChatMessage.find({ sessionId: session._id }).sort({ createdAt: 1 });
-  await ChatMessage.create({ sessionId: session._id, role: "user", content });
   const messages: AIMessage[] = [...previous.map((m): AIMessage => ({ role: m.role, content: m.content })), { role: "user", content }];
+  const params = { model: session.model, messages, apiKey: await getApiKeyForModel(userId, session.model) };
+  const context = { userId, source: "conversation" as const, sourceRef: id, model: session.model, operationKey };
+  const ticket = await AIService.prepare(params, context);
+  try {
+    await ChatMessage.create({ sessionId: session._id, role: "user", content });
   if (session.title === "新会话") {
     session.title = content.slice(0, 30);
     await session.save();
   }
-  return { session, messages };
+  } catch (error) { await settle(ticket.requestId, "not_sent"); throw error; }
+  return { session, params, context, ticket };
 }
 
-export async function runMessage(userId: string, id: string, content: string) {
-  const { session, messages } = await prepareMessage(userId, id, content);
-  const result = await AIService.chat({ model: session.model, messages, apiKey: await getApiKeyForModel(userId, session.model) });
+export async function runMessage(userId: string, id: string, content: string, operationKey?: string) {
+  const { session, params, context, ticket } = await prepareMessage(userId, id, content, operationKey);
+  const result = await AIService.chat(params, context, ticket);
   const message = await ChatMessage.create({ sessionId: session._id, role: "assistant", content: result.content, tokenUsage: result.usage });
   session.updatedAt = new Date();
   await session.save();
   return { session: dto(session), message: messageDto(message) };
 }
 
-export async function streamMessage(userId: string, id: string, content: string, onDelta: (text: string) => void, signal: AbortSignal) {
-  const { session, messages } = await prepareMessage(userId, id, content);
+export async function streamMessage(userId: string, id: string, content: string, onDelta: (text: string) => void, signal: AbortSignal, prepared?: Awaited<ReturnType<typeof prepareMessage>>) {
+  const { session, params, context, ticket } = prepared ?? await prepareMessage(userId, id, content);
   let output = "";
   let usage: TokenUsage | undefined;
-  for await (const event of AIService.stream({ model: session.model, messages, apiKey: await getApiKeyForModel(userId, session.model) }, signal)) {
+  for await (const event of AIService.stream(params, signal, context, ticket)) {
     if (event.type === "delta") {
       output += event.content;
       onDelta(event.content);

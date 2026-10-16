@@ -295,6 +295,34 @@ export async function retryWorkflowRun(userId: string, workflowId: string, runId
   return toRunDto(run);
 }
 
+/** 单次模型调用的时限是 180 秒；超过这个宽限仍停留在执行中的运行，视为执行进程已消失。 */
+const STALE_RUN_GRACE_MS = 10 * 60_000;
+
+/**
+ * 认领后执行进程崩溃的运行会一直停在 running，且不会再有执行者接手。
+ * 这里把它收敛成可重试的失败状态，避免用户只能看到一条永远“执行中”的记录。
+ */
+export async function recoverStaleWorkflowRuns(now = new Date()) {
+  const stale = await WorkflowRun.find({
+    status: "running",
+    executionClaimed: true,
+    updatedAt: { $lt: new Date(now.getTime() - STALE_RUN_GRACE_MS) },
+  }).limit(50);
+  let recovered = 0;
+  for (const run of stale) {
+    const interrupted = run.steps.find((step) => step.status !== "success");
+    if (interrupted) {
+      interrupted.status = "error";
+      interrupted.errorMessage = "执行中断：服务进程可能已退出，可从该步骤重试";
+    }
+    run.status = "error";
+    run.finishedAt = now;
+    await run.save();
+    recovered += 1;
+  }
+  return recovered;
+}
+
 export interface WorkflowStreamHandlers {
   signal: AbortSignal;
   onEvent: (event: Record<string, unknown>) => void;
@@ -302,7 +330,7 @@ export interface WorkflowStreamHandlers {
 
 export async function executeWorkflowRun(userId: string, runId: string, handlers: WorkflowStreamHandlers) {
   if (!mongoose.isValidObjectId(runId)) throw new AppError(404, 40401, "工作流运行记录不存在");
-  const run = await WorkflowRun.findOne({ _id: runId, userId });
+  const run = await WorkflowRun.findOneAndUpdate({ _id: runId, userId, status: "running", executionClaimed: { $ne: true } }, { $set: { executionClaimed: true } }, { new: true });
   if (!run) throw new AppError(404, 40401, "工作流运行记录不存在");
   if (run.status !== "running") throw new AppError(409, 40001, "工作流运行已结束");
 
@@ -345,6 +373,7 @@ export async function executeWorkflowRun(userId: string, runId: string, handlers
           apiKey: await getApiKeyForModel(userId, step.model),
         },
         handlers.signal,
+        { userId, source: "workflow", sourceRef: `${runId}:${step.stepId}`, model: step.model, operationKey: `workflow:${runId}:${step.stepId}` },
       )) {
         if (event.type === "delta") {
           output += event.content;
@@ -398,7 +427,7 @@ export async function executeWorkflowRun(userId: string, runId: string, handlers
       run.status = "error";
       run.finishedAt = new Date();
       await run.save();
-      write({ type: "step-error", stepId: step.stepId, message });
+      write({ type: "step-error", stepId: step.stepId, message, code: error instanceof AppError ? error.code : 50000 });
       write({ type: "run-complete", runId, status: "error" });
       return;
     }

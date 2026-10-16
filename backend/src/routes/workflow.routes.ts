@@ -1,3 +1,4 @@
+import { withUsageOperation } from "../services/usage/operation.service.js";
 import { Router } from "express";
 import { auth } from "../middleware/auth.middleware.js";
 import { validate } from "../middleware/validate.middleware.js";
@@ -9,8 +10,8 @@ router.use(auth);
 router.get("/", controller.list);
 router.post("/", validate(workflowInputSchema), controller.create);
 router.get("/:id/runs", controller.runs);
-router.post("/:id/runs/stream", validate(workflowRunInputSchema), controller.startRun);
-router.post("/:id/runs/:runId/retry/stream", controller.retryRun);
+router.post("/:id/runs/stream", validate(workflowRunInputSchema), withUsageOperation(controller.startRun));
+router.post("/:id/runs/:runId/retry/stream", withUsageOperation(controller.retryRun));
 router.get("/:id", controller.getOne);
 router.put("/:id", validate(workflowInputSchema), controller.update);
 router.delete("/:id", controller.remove);

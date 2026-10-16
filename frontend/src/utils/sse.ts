@@ -66,7 +66,7 @@ export function streamEndpoint(endpoint: string, payload: unknown, handlers: Str
       const url = endpoint.startsWith('/api/') ? `${base}${endpoint.slice(4)}` : endpoint;
       const res = await fetch(url, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${auth.token}` },
+        headers: { "Idempotency-Key": crypto.randomUUID(), "Content-Type": "application/json", Authorization: `Bearer ${auth.token}` },
         body: JSON.stringify(payload),
         signal: controller.signal,
       });

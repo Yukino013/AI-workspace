@@ -44,6 +44,9 @@ export const workspaceLinks = [
     description: "查看 Prompt 的运行结果",
   },
   {
+    path: "/usage", label: "使用量与额度", icon: "chart", description: "查看 Token 消耗、调用次数与每日预算",
+  },
+  {
     path: "/providers",
     label: "模型与 API",
     icon: "settings",

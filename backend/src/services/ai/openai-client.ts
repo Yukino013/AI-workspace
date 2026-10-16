@@ -11,12 +11,15 @@ export interface ChatParams {
   messages: ChatMessage[];
   /** 当前用户的自定义 key；未提供时使用服务端默认 key */
   apiKey?: string;
+  maxTokens?: number;
+  signal?: AbortSignal;
 }
 
 export interface TokenUsage {
   promptTokens: number;
   completionTokens: number;
   totalTokens: number;
+  complete?: boolean;
 }
 
 export interface ChatResult {
@@ -47,12 +50,14 @@ interface AdapterConfig {
 
 /** 把 OpenAI 兼容的 usage（snake_case）映射为内部 camelCase 结构 */
 function mapUsage(raw: { prompt_tokens?: unknown; completion_tokens?: unknown; total_tokens?: unknown } | undefined): TokenUsage {
+  const complete = [raw?.prompt_tokens, raw?.completion_tokens, raw?.total_tokens].every(v => Number.isSafeInteger(v) && Number(v) >= 0);
   const promptTokens = Number(raw?.prompt_tokens ?? 0);
   const completionTokens = Number(raw?.completion_tokens ?? 0);
   return {
     promptTokens,
     completionTokens,
     totalTokens: Number(raw?.total_tokens ?? promptTokens + completionTokens),
+    complete,
   };
 }
 
@@ -118,7 +123,8 @@ export function createOpenAIAdapter(name: string, cfg: AdapterConfig): AIAdapter
         "Content-Type": "application/json",
         Authorization: `Bearer ${apiKey}`,
       },
-      body: JSON.stringify({ model: params.model, messages: params.messages, stream: false }),
+      body: JSON.stringify({ model: params.model, messages: params.messages, max_tokens: params.maxTokens, stream: false }),
+      signal: params.signal,
     });
 
     if (!res.ok) {
@@ -143,6 +149,7 @@ export function createOpenAIAdapter(name: string, cfg: AdapterConfig): AIAdapter
       body: JSON.stringify({
         model: params.model,
         messages: params.messages,
+        max_tokens: params.maxTokens,
         stream: true,
         // OpenAI 兼容接口需要显式开启，流结束时才会返回 token 用量。
         stream_options: { include_usage: true },
@@ -158,7 +165,7 @@ export function createOpenAIAdapter(name: string, cfg: AdapterConfig): AIAdapter
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
-    let usage: TokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+    let usage: TokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0, complete: false };
     let upstreamDone = false;
 
     const consumeEvent = (event: string): StreamEvent[] => {

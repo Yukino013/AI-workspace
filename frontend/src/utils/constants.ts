@@ -1,6 +1,6 @@
 /** 模型标识统一用常量，禁止在业务代码里写死字符串 */
 export const AI_MODELS = {
-  DEEPSEEK: "deepseek-v4-flash",
+  DEEPSEEK: "deepseek-flash",
   QWEN: "qwen-plus",
   ANTHROPIC: "claude-sonnet-5",
 } as const;

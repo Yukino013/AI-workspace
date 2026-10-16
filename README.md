@@ -67,14 +67,18 @@ npm run test:config --prefix backend
 | 代码工具               | 解释、翻译、重构、审查、生成测试；翻译传递目标语言          |
 | AI 工作流              | 最多 10 个顺序 Prompt 步骤、输入/步骤输出映射、运行/失败重试 |
 | 历史记录               | 搜索、详情、复制、Markdown 导出、继续对话、再次运行代码工具 |
+| 使用量与额度           | 今日额度概览、7/30 天趋势、按模型/来源分布、调用明细、每日预算 |
 | 模型与 API             | 查看配置状态、保存或清除个人密钥                            |
+
+DeepSeek 新请求使用官方当前模型名 `deepseek-flash`；已保存的 `deepseek-v4-flash` 会话和工作流仍可运行，后端会将旧名称映射为当前模型名发送。
 
 统一外壳与主题位于 `frontend/src/components/layout/AppShell.vue` 和 `frontend/src/styles/theme.css`。对话与生成的异步状态集中到 `frontend/src/composables`；业务展示组件按 `chat`、`code-tool`、`history` 分组。后端继续沿用 routes → controllers → services → models 分层与 `{ code, message, data }` 响应格式。
 
 ## 验证命令
 
 ```bash
-npm test --prefix backend # 需要本机 MongoDB，使用自动清理的独立测试数据库
+npm test --prefix backend # 需要本机 MongoDB 副本集，使用自动清理的独立测试数据库
+npm run test:usage --prefix backend # 只跑额度模块：纯函数 + 副本集事务 + 四类入口计量
 npm test --prefix frontend
 npm run typecheck --prefix frontend
 npm run build --prefix frontend
@@ -82,6 +86,32 @@ npm run build --prefix backend
 ```
 
 回归测试使用 Node 原生测试运行器，借助 Vite 已安装的 esbuild 加载实际 TypeScript 模块。覆盖 SSE 分片、UTF-8、CRLF、结束标记、异常断流、取消、401，以及 Markdown 换行、代码围栏和导出文件名。
+
+## 本地 MongoDB 副本集（额度模块前提）
+
+使用量与额度用多文档事务保证“预占、结算、每日汇总”三者一致，因此生成类接口（Prompt / 对话 / 代码工具 / 工作流）在非副本集实例上会返回 `50301` 并拒绝调用，而不是退化成“先查再扣”。现有 `127.0.0.1:27017` 的 standalone 实例无需改造，另起一个隔离的单节点副本集即可：
+
+```bash
+mkdir -p /tmp/ai-workbench-rs
+mongod --replSet rs0 --port 27018 --dbpath /tmp/ai-workbench-rs --bind_ip 127.0.0.1
+# 另开终端，初始化一次
+mongosh --port 27018 --eval 'rs.initiate({_id:"rs0",members:[{_id:0,host:"127.0.0.1:27018"}]})'
+```
+
+- 后端测试默认连接 `mongodb://127.0.0.1:27018/?replicaSet=rs0&directConnection=true`，可用 `USAGE_TEST_MONGO_URI` 覆盖；连到 standalone 时额度测试会显式失败并提示前提未满足，不会静默跳过。
+- 本地起服务时把 `backend/.env` 的 `MONGODB_URI` 指向该副本集（例如 `mongodb://127.0.0.1:27018/ai-workbench?replicaSet=rs0`）。
+- 单节点副本集只用于本地开发与测试，不提供生产高可用。
+
+## 使用量与额度
+
+登录后侧栏「使用量与额度」（`/usage`）展示今日预算、已消耗、预占、7/30 天趋势、按模型与来源分布，以及可筛选的分页调用明细。
+
+- 额度是应用内的每日 Token 预算（默认 1,000,000，可在页面调整），不代表模型供应商账户余额。
+- 口径：`可用 = 每日预算 − 已消耗 − 预占`。调用前按“输入估算 + 单次最大输出(4096)”预占；成功按供应商实际用量结算，成功但缺少完整用量时按 `max(预占, 已知下界)` 保守扣额并标记“估算”。失败请求释放预占、不计入已消耗，但仍保留失败流水；未知 Token 显示为“未知”而不是 0。
+- 额度日按 Asia/Shanghai 计算，跨零点完成的请求仍结算到发起当天；每用户同时最多 3 个进行中的 AI 请求，单次请求时限 180 秒。
+- 生成类请求可带 `Idempotency-Key`（前端已自动生成）；同一会话同一时间只接受一轮发送，被额度拒绝的请求不会留下用户消息或业务记录。
+- 接口：`GET /api/usage/overview?days=7|30`、`GET /api/usage/records`、`PATCH /api/usage/quota`，均要求登录。
+- 后端每 30 秒执行一次恢复：超时未结算的流水区分“尚未发送”与“已发送但结果不明”分别处理，认领后中断的工作流运行会收敛为可重试的失败状态。
 
 ## 无真实 AI 调用的隔离联调
 
@@ -114,6 +144,7 @@ npm run dev --prefix frontend
 - 停止生成会取消前端请求；部分输出不代表已完整持久化，也不能保证上游立即停止计费。
 - 历史查询改为批量读取消息，避免逐会话查询；当前仍在内存中整合分页，大数据量下应继续改进数据库侧分页。
 - Element Plus 当前全量注册，生产构建仍可能提示主包较大，本轮未以拆包掩盖此问题。
+- 使用量与额度已在隔离副本集上跑通事务、并发、幂等、跨日与恢复用例；尚未用真实 Provider 账号核对账单口径，页面也还没有做浏览器人工验收。
 
 项目状态和接口约定见 `Claude.md`；全栈知识地图与端到端代码流见 `PROJECT_KNOWLEDGE.md`；前端开发约定见 `frontend/README.md`。
 

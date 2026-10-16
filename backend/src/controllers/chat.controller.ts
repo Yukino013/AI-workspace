@@ -5,7 +5,7 @@ import { ok } from "../utils/response.js";
 /** 非流式：一次性返回完整结果 */
 export async function run(req: Request, res: Response) {
   const { promptId, model, variables } = req.body;
-  const data = await runChat(req.user!.userId, { promptId, model, variables });
+  const data = await runChat(req.user!.userId, { promptId, model, variables }, String(req.header("Idempotency-Key") || ""));
   res.json(ok(data));
 }
 
@@ -19,7 +19,7 @@ export async function stream(req: Request, res: Response) {
   const { promptId, model, variables } = req.body;
 
   // 预检：抛出的 AppError 交给统一错误处理，以 JSON 返回
-  const prepared = await prepareChat(req.user!.userId, { promptId, model, variables });
+  const prepared = await prepareChat(req.user!.userId, { promptId, model, variables }, String(req.header("Idempotency-Key") || ""));
 
   res.status(200);
   res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
@@ -30,6 +30,7 @@ export async function stream(req: Request, res: Response) {
   res.flushHeaders?.();
 
   const controller = new AbortController();
+  if (res.destroyed) controller.abort();
   const onClientClose = () => {
     if (!res.writableEnded) {
       controller.abort();

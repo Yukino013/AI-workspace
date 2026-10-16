@@ -1,3 +1,4 @@
+import { withUsageOperation } from "../services/usage/operation.service.js";
 import { Router } from "express";
 import { auth } from "../middleware/auth.middleware.js";
 import { validate } from "../middleware/validate.middleware.js";
@@ -10,6 +11,6 @@ router.post("/", validate(createConversationSchema), controller.create);
 router.get("/:id", controller.detail);
 router.patch("/:id", validate(createConversationSchema), controller.update);
 router.delete("/:id", controller.remove);
-router.post("/:id/messages", validate(messageSchema), controller.message);
-router.post("/:id/stream", validate(messageSchema), controller.stream);
+router.post("/:id/messages", validate(messageSchema), withUsageOperation(controller.message, req => `conversation:${req.params.id}`));
+router.post("/:id/stream", validate(messageSchema), withUsageOperation(controller.stream, req => `conversation:${req.params.id}`));
 export default router;

@@ -1,7 +1,7 @@
 import { Types } from "mongoose";
 import { Prompt } from "../models/prompt.model.js";
 import { ChatRecord } from "../models/chat-record.model.js";
-import { AIService } from "./ai/ai.service.js";
+import { AIService, type PreparedCall } from "./ai/ai.service.js";
 import type { ChatMessage, TokenUsage } from "./ai/openai-client.js";
 import { extractVariables, renderPrompt } from "../utils/variables.js";
 import { AppError } from "../utils/AppError.js";
@@ -20,6 +20,9 @@ export interface PreparedChat {
   /** 变量替换后的完整 AI 输入 */
   input: string;
   messages: ChatMessage[];
+  metering: import("./ai/ai.service.js").MeteringContext;
+  ticket: PreparedCall;
+  apiKey?: string;
 }
 
 export interface StreamHandlers {
@@ -77,7 +80,7 @@ function validateVariables(required: string[], values: Record<string, string>) {
  * 预检：校验资源归属 + 变量完整性 + 渲染输入。
  * 在 SSE 流开始前调用，失败时抛 AppError，由统一错误处理以 JSON 返回。
  */
-export async function prepareChat(userId: string, input: ChatRunInput): Promise<PreparedChat> {
+export async function prepareChat(userId: string, input: ChatRunInput, operationKey?: string): Promise<PreparedChat> {
   const prompt = await Prompt.findOne({ _id: input.promptId, userId });
   if (!prompt) {
     throw new AppError(404, 40401, "Prompt 不存在");
@@ -86,7 +89,11 @@ export async function prepareChat(userId: string, input: ChatRunInput): Promise<
   validateVariables(extractVariables(prompt.content), input.variables);
   const rendered = renderPrompt(prompt.content, input.variables);
 
+  const metering = { userId, source: "prompt" as const, sourceRef: String(prompt._id), model: input.model, operationKey };
+  const params = { model: input.model, messages: [{ role: "user" as const, content: rendered }], apiKey: await getApiKeyForModel(userId, input.model) };
+  const ticket = await AIService.prepare(params, metering);
   return {
+    metering, ticket, apiKey: params.apiKey,
     promptId: prompt._id,
     promptName: prompt.name,
     promptVersion: prompt.currentVersion,
@@ -96,12 +103,12 @@ export async function prepareChat(userId: string, input: ChatRunInput): Promise<
 }
 
 /** 非流式：一次性返回完整结果，并落库。见设计文档 7.4 */
-export async function runChat(userId: string, input: ChatRunInput) {
-  const prepared = await prepareChat(userId, input);
+export async function runChat(userId: string, input: ChatRunInput, operationKey?: string) {
+  const prepared = await prepareChat(userId, input, operationKey);
   const start = Date.now();
 
   try {
-    const result = await AIService.chat({ model: input.model, messages: prepared.messages, apiKey: await getApiKeyForModel(userId, input.model) });
+    const result = await AIService.chat({ model: input.model, messages: prepared.messages, apiKey: prepared.apiKey }, prepared.metering, prepared.ticket);
     const record = await ChatRecord.create({
       userId,
       promptId: prepared.promptId,
@@ -144,7 +151,7 @@ export async function streamChat(userId: string, prepared: PreparedChat, model: 
   let usage = zeroUsage();
 
   try {
-    for await (const event of AIService.stream({ model, messages: prepared.messages, apiKey: await getApiKeyForModel(userId, model) }, handlers.signal)) {
+    for await (const event of AIService.stream({ model, messages: prepared.messages, apiKey: prepared.apiKey }, handlers.signal, prepared.metering, prepared.ticket)) {
       if (event.type === "delta") {
         output += event.content;
         handlers.onDelta(event.content);
@@ -163,7 +170,7 @@ export async function streamChat(userId: string, prepared: PreparedChat, model: 
       output,
       duration: Date.now() - start,
       tokenUsage: usage,
-      status: "success",
+      status: handlers.signal.aborted ? "aborted" : "success",
     });
   } catch (err) {
     const e = err as Error;
@@ -186,7 +193,7 @@ export async function streamChat(userId: string, prepared: PreparedChat, model: 
 
     // 非中断错误继续向上抛，由 controller 以 data: {"error":{...}} 事件回传（见 11.4）
     if (!aborted) {
-      throw new AppError(502, 50000, errorMessage ?? "AI 调用失败");
+      throw err instanceof AppError ? err : new AppError(502, 50000, errorMessage ?? "AI 调用失败");
     }
   }
 }

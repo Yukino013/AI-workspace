@@ -14,6 +14,7 @@ defineProps<{
     | "book"
     | "chat"
     | "chevron-right"
+    | "chart"
     | "clock"
     | "code"
     | "history"
@@ -46,7 +47,8 @@ defineProps<{
     stroke-linejoin="round"
     aria-hidden="true"
   >
-    <template v-if="name === 'arrow-up'">
+    <template v-if="name === 'chart'"><path d="M4 3v17h17M8 15v-4M13 15V6M18 15V9" /></template>
+    <template v-else-if="name === 'arrow-up'">
       <path d="M12 19V5m-6 6 6-6 6 6" />
     </template>
     <template v-else-if="name === 'arrow-up-right'">

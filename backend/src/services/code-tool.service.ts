@@ -32,13 +32,8 @@ function dto(doc: any) {
 export function listTools() {
   return CODE_TOOLS;
 }
-export async function runTool(
-  userId: string,
-  key: string,
-  input: { model: string; code: string; language?: string },
-) {
+export async function prepareTool(userId: string, key: string, input: { model: string; code: string; language?: string }, operationKey?: string) {
   const tool = getTool(key);
-  const start = Date.now();
   const messages = [
     {
       role: "system" as const,
@@ -50,12 +45,21 @@ export async function runTool(
     },
     { role: "user" as const, content: input.code },
   ];
+  const params = { model: input.model, messages, apiKey: await getApiKeyForModel(userId, input.model) };
+  const context = { userId, source: "code_tool" as const, sourceRef: key, model: input.model, operationKey };
+  return { tool, params, context, ticket: await AIService.prepare(params, context) };
+}
+export async function runTool(
+  userId: string,
+  key: string,
+  input: { model: string; code: string; language?: string },
+  operationKey?: string,
+) {
+  const { tool, params, context, ticket } = await prepareTool(userId, key, input, operationKey);
+  const start = Date.now();
+
   try {
-    const result = await AIService.chat({
-      model: input.model,
-      messages,
-      apiKey: await getApiKeyForModel(userId, input.model),
-    });
+    const result = await AIService.chat(params, context, ticket);
     const record = await CodeToolRecord.create({
       userId,
       toolKey: key,
@@ -91,30 +95,16 @@ export async function streamTool(
   input: { model: string; code: string; language?: string },
   onEvent: (event: { type: "reasoning" | "delta"; content: string }) => void,
   signal: AbortSignal,
+  prepared?: Awaited<ReturnType<typeof prepareTool>>,
 ) {
-  const tool = getTool(key);
+  const { tool, params, context, ticket } = prepared ?? await prepareTool(userId, key, input);
   const start = Date.now();
   let output = "";
   let usage;
-  const messages = [
-    {
-      role: "system" as const,
-      content:
-        CODE_TOOL_PROMPTS[tool.key as CodeToolKey] +
-        (input.language?.trim()
-          ? `\n目标编程语言：${input.language.trim()}`
-          : ""),
-    },
-    { role: "user" as const, content: input.code },
-  ];
+
   try {
     for await (const event of AIService.stream(
-      {
-        model: input.model,
-        messages,
-        apiKey: await getApiKeyForModel(userId, input.model),
-      },
-      signal,
+      params, signal, context, ticket,
     )) {
       if (event.type === "delta") {
         output += event.content;

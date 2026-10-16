@@ -14,6 +14,8 @@ import codeToolRoutes from "./routes/code-tool.routes.js";
 import historyRoutes from "./routes/history.routes.js";
 import workflowRoutes from "./routes/workflow.routes.js";
 
+import usageRoutes from "./routes/usage.routes.js";
+
 const app = express();
 
 // 安全响应头
@@ -35,6 +37,7 @@ app.get("/api/health", (_req, res) => {
 
 // 业务路由
 app.use("/api/auth", authRoutes);
+app.use("/api/usage", usageRoutes);
 app.use("/api/providers", providerRoutes);
 app.use("/api/conversations", conversationRoutes);
 app.use("/api/code-tools", codeToolRoutes);

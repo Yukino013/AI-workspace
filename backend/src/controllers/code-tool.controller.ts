@@ -1,10 +1,12 @@
 import type { Request, Response } from 'express';
-import { listTools, runTool, streamTool } from '../services/code-tool.service.js';
+import { listTools, prepareTool, runTool, streamTool } from '../services/code-tool.service.js';
 import { ok } from '../utils/response.js';
 export async function list(_req: Request, res: Response) { res.json(ok(listTools())); }
-export async function run(req: Request, res: Response) { res.json(ok(await runTool(req.user!.userId, String(req.params.key), req.body))); }
+export async function run(req: Request, res: Response) { res.json(ok(await runTool(req.user!.userId, String(req.params.key), req.body, req.header("Idempotency-Key")))); }
 export async function stream(req: Request, res: Response) {
+  const prepared = await prepareTool(req.user!.userId, String(req.params.key), req.body, req.header("Idempotency-Key"));
   const controller = new AbortController();
+  if (res.destroyed) controller.abort();
   res.status(200).set({
     'Content-Type': 'text/event-stream; charset=utf-8',
     'Cache-Control': 'no-cache',
@@ -35,7 +37,7 @@ export async function stream(req: Request, res: Response) {
             },
           ],
         }),
-      controller.signal,
+      controller.signal, prepared,
     );
     if (!controller.signal.aborted) res.write('data: [DONE]\n\n');
   } catch (err) {

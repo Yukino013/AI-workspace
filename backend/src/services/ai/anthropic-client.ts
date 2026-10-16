@@ -63,8 +63,31 @@ function toAnthropicMessages(messages: ChatMessage[]) {
   return { system, messages: normalized };
 }
 
-function toUsage(input: number, output: number): TokenUsage {
-  return { promptTokens: input, completionTokens: output, totalTokens: input + output };
+function toUsage(input: number, output: number, complete = false): TokenUsage {
+  return { promptTokens: input, completionTokens: output, totalTokens: input + output, complete };
+}
+
+interface AnthropicUsage {
+  input_tokens?: unknown;
+  output_tokens?: unknown;
+  cache_creation_input_tokens?: unknown;
+  cache_read_input_tokens?: unknown;
+}
+
+/**
+ * Anthropic 的 `input_tokens` 只统计未命中缓存的输入，缓存写入与缓存读取的 Token
+ * 由独立字段上报。只累加前者会低估用量，因此这里把它们一起算作输入；
+ * 缺失的缓存字段按 0 处理，但只有 `input_tokens` 明确存在才算“已知输入”。
+ */
+function readInputTokens(usage: AnthropicUsage | undefined) {
+  if (!Number.isSafeInteger(usage?.input_tokens)) return { tokens: 0, complete: false };
+  const cache = [usage!.cache_creation_input_tokens, usage!.cache_read_input_tokens]
+    .reduce<number>((sum, value) => sum + (Number.isSafeInteger(value) && Number(value) >= 0 ? Number(value) : 0), 0);
+  return { tokens: Number(usage!.input_tokens) + cache, complete: true };
+}
+
+function readOutputTokens(usage: AnthropicUsage | undefined) {
+  return Number.isSafeInteger(usage?.output_tokens) ? Number(usage!.output_tokens) : 0;
 }
 
 /** 提取非流式响应中的纯文本（content 是 block 数组） */
@@ -89,7 +112,7 @@ export function createAnthropicAdapter(name: string, cfg: AdapterConfig): AIAdap
     const apiKey = params.apiKey ?? cfg.apiKey;
     assertKey(apiKey, name);
     const { system, messages } = toAnthropicMessages(params.messages);
-    const body: Record<string, unknown> = { model: params.model, max_tokens: 4096, messages };
+    const body: Record<string, unknown> = { model: params.model, max_tokens: params.maxTokens ?? 4096, messages };
     if (system) body.system = system;
 
     const res = await fetch(`${baseUrl}/v1/messages`, {
@@ -100,6 +123,7 @@ export function createAnthropicAdapter(name: string, cfg: AdapterConfig): AIAdap
         'anthropic-version': ANTHROPIC_VERSION,
       },
       body: JSON.stringify(body),
+      signal: params.signal,
     });
 
     if (!res.ok) {
@@ -107,9 +131,10 @@ export function createAnthropicAdapter(name: string, cfg: AdapterConfig): AIAdap
     }
 
     const data = await res.json();
+    const input = readInputTokens(data.usage);
     return {
       content: extractText(data),
-      usage: toUsage(data.usage?.input_tokens ?? 0, data.usage?.output_tokens ?? 0),
+      usage: toUsage(input.tokens, readOutputTokens(data.usage), input.complete && Number.isSafeInteger(data.usage?.output_tokens)),
     };
   }
 
@@ -119,7 +144,7 @@ export function createAnthropicAdapter(name: string, cfg: AdapterConfig): AIAdap
     const { system, messages } = toAnthropicMessages(params.messages);
     const body: Record<string, unknown> = {
       model: params.model,
-      max_tokens: 4096,
+      max_tokens: params.maxTokens ?? 4096,
       messages,
       stream: true,
     };
@@ -147,6 +172,8 @@ export function createAnthropicAdapter(name: string, cfg: AdapterConfig): AIAdap
     let buffer = '';
     let usage: TokenUsage = toUsage(0, 0);
     let messageStopped = false;
+    let hasInput = false;
+    let hasOutput = false;
 
     // Anthropic 的事件通过 data 里的 type 字段区分，命名事件行（event:）可忽略
     const consumeEvent = (event: string): StreamEvent[] => {
@@ -168,8 +195,9 @@ export function createAnthropicAdapter(name: string, cfg: AdapterConfig): AIAdap
       const events: StreamEvent[] = [];
       switch (json.type) {
         case 'message_start': {
-          const input = (json.message?.usage as { input_tokens?: number } | undefined)?.input_tokens ?? 0;
-          usage = toUsage(input, 0);
+          const input = readInputTokens(json.message?.usage as AnthropicUsage | undefined);
+          hasInput = input.complete;
+          usage = toUsage(input.tokens, 0);
           break;
         }
         case 'content_block_delta':
@@ -180,8 +208,8 @@ export function createAnthropicAdapter(name: string, cfg: AdapterConfig): AIAdap
           }
           break;
         case 'message_delta': {
-          const output = (json.usage as { output_tokens?: number } | undefined)?.output_tokens ?? 0;
-          usage = toUsage(usage.promptTokens, output);
+          hasOutput = Number.isSafeInteger((json.usage as AnthropicUsage | undefined)?.output_tokens);
+          usage = toUsage(usage.promptTokens, readOutputTokens(json.usage as AnthropicUsage | undefined));
           break;
         }
         case 'message_stop':
@@ -221,7 +249,7 @@ export function createAnthropicAdapter(name: string, cfg: AdapterConfig): AIAdap
       }
     }
 
-    yield { type: 'done', usage };
+    yield { type: 'done', usage: { ...usage, complete: messageStopped && hasInput && hasOutput } };
   }
 
   return { chat, stream };

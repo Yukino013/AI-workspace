@@ -4,6 +4,7 @@ import { useAuthStore } from '@/stores/auth';
 const router = createRouter({
   history: createWebHistory(),
   routes: [
+    { path: '/usage', name: 'usage', component: () => import('@/views/UsageView.vue') },
     {
       path: '/login',
       name: 'login',

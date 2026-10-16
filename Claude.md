@@ -7,7 +7,7 @@
 
 ## 开发状态与约定
 
-**当前状态**：核心功能链路已完成——后端已实现注册/登录、Prompt CRUD、版本与调用历史、AI Adapter（DeepSeek/Qwen/Anthropic）、SSE 流式输出，以及 Provider 配置、AI 对话、代码工具、顺序式 AI 工作流和统一历史记录；前端对应页面也已接入真实后端。工作流最多 10 个顺序 Prompt 步骤，支持变量映射、配置快照、流式运行记录、取消和失败步骤重试。当前 Provider 范围是内置三家模型和用户自定义 API Key，部署、自动化测试、Lint/格式化及动态 Provider 扩展仍待完成。本文档既是开发设计文档，也是本项目的 CLAUDE.md，后续开发一律以本文档为准。
+**当前状态**：核心功能链路已完成——后端已实现注册/登录、Prompt CRUD、版本与调用历史、AI Adapter（DeepSeek/Qwen/Anthropic）、SSE 流式输出，以及 Provider 配置、AI 对话、代码工具、顺序式 AI 工作流和统一历史记录；前端对应页面也已接入真实后端。工作流最多 10 个顺序 Prompt 步骤，支持变量映射、配置快照、流式运行记录、取消和失败步骤重试。使用量与额度模块提供每日 Token 预算、预占与幂等结算、用量明细与趋势。当前 Provider 范围是内置三家模型和用户自定义 API Key；使用量与额度已把四类生成入口统一接入预占与结算（依赖 MongoDB 副本集事务）。部署、浏览器人工验收、Lint/格式化和动态 Provider 扩展仍待完成。本文档既是开发设计文档，也是本项目的 CLAUDE.md，后续开发一律以本文档为准。
 
 **前端约定**：
 
@@ -22,13 +22,14 @@
 - 统一响应 `{ code, message, data }`，错误码以第 9 章为准
 - 参数校验用 Zod；密码用 bcryptjs；鉴权用 JWT（见第 7.1 / 11 章）
 
-**五大并列功能模块**：
+**六大并列功能模块**：
 
 1. **Prompt 工作台**（原有，见 7.2–7.8）
 2. **AI 对话**（新增，见 7.9）
 3. **代码工具**（新增，见 7.10）
 4. **AI 工作流**（新增，顺序编排 Prompt、运行记录和失败步骤重试）
 5. **历史记录**（见 7.11）
+6. **使用量与额度**（新增，横切计量：每日 Token 预算、预占与幂等结算、用量趋势与明细）
 
 **命令**：`frontend` 下 `npm run dev` / `npm run build`；`backend` 下 `npm run dev` / `npm run build` / `npm start`。
 
@@ -59,6 +60,7 @@
 | 代码工具                   | 已完成           | `code-tool.routes.ts`、`code-tool.service.ts`、`CodeToolView.vue` 已支持固定场景、run/stream 与结果落库                                                | 补接口测试与结果复用                                                |
 | 统一历史记录               | 已完成           | `history.routes.ts`、`history.service.ts`、`HistoryView.vue` 已支持对话/代码工具聚合、搜索、来源筛选、继续对话、再次运行、复制输入/结果和导出 Markdown | 补自动化测试与更细粒度的历史详情                                    |
 | 顺序式 AI 工作流           | 已完成（MVP）    | `workflow.routes.ts`、`workflow.service.ts`、`WorkflowView.vue` 支持 Prompt 快照、变量映射、SSE 顺序执行、取消、运行记录与失败步骤重试          | 后续按实际使用增加模板、效果评测和更高级编排                        |
+| 使用量与额度               | 已完成（待浏览器验收） | `usage.routes.ts`、`usage/quota.service.ts`、`operation.service.ts`、`UsageView.vue` 实现每日预算、预占/幂等结算、并发上限、超时恢复、用量趋势与明细 | 真实 Provider 联调与页面人工验收                                    |
 | 部署                       | 未开始           | 文档有 Docker / Nginx 方案，仓库暂无 Dockerfile / compose                                                                                              | Day 7 后补齐并跑通                                                  |
 | 测试 / Lint / 格式化       | 未开始           | 当前`package.json` 只有 dev/build/start/typecheck                                                                                                      | 补 Vitest / Supertest / ESLint / Prettier，再把命令加入质量门       |
 
@@ -70,7 +72,8 @@
 4. ~~Prompt 版本和调用历史~~ ✅（第一个闭环 MVP 已跑通）
 5. ~~扩展 Provider、AI 对话、代码工具、统一历史记录（Day 8–10）~~ ✅（基础版已完成）。
 6. ~~补齐结果复用闭环（继续对话、再次运行、复制、Markdown 导出）~~ ✅。
-7. 下一步：修复依赖环境并补齐自动化测试，完成真实 API/MongoDB 联调，再推进部署与 Provider 动态扩展。
+7. ~~实现使用量与额度：计量内核、四类入口接入、用量页面与自动化测试~~ ✅（副本集上 46 个后端用例通过；四项边界修复见 `docs/usage-quota-progress.md`）。
+8. 下一步：完成真实 Provider 联调与页面人工验收，再推进部署与 Provider 动态扩展。
 
 ## 0.3 文档维护规则
 
@@ -90,7 +93,7 @@ AI 开发者工作台
 
 ## 1.2 项目定位
 
-面向开发者的 AI 开发工具，当前包含**五大并列功能模块**：
+面向开发者的 AI 开发工具，当前包含**六大并列功能模块**：
 
 | 模块            | 说明                                                                      |
 | --------------- | ------------------------------------------------------------------------- |
@@ -99,6 +102,7 @@ AI 开发者工作台
 | ③ 代码工具      | 代码解释/翻译/重构/Review/生成测试等固定场景，选中代码直接套用            |
 | ④ AI 工作流     | 顺序编排最多 10 个 Prompt 步骤，支持输入映射、流式运行和失败步骤重试       |
 | ⑤ 历史记录      | 保存对话与 AI 结果，支持搜索与复用                                        |
+| ⑥ 使用量与额度  | 每日 Token 预算、预占与结算、用量趋势与明细，覆盖四类生成入口              |
 
 项目重点不是堆功能，而是通过一个完整项目掌握：
 
@@ -558,7 +562,20 @@ CodeToolRecord
 └── createdAt
 ```
 
-## 6.9 索引设计
+## 6.9 使用量与额度集合（QuotaAccount / DailyUsage / UsageRequest / UsageOperation）
+
+```text
+QuotaAccount     账户策略与并发：dailyTokenLimit、activeRequests、mutationVersion、trackingStartedAt
+DailyUsage       每日权威汇总：userId + quotaDate（唯一）、预算快照、调用次数、reported / estimated / consumed / reserved
+UsageRequest     每次尝试的流水：requestId（唯一）、userId + operationKey（唯一幂等键）、status(reserved/running/settled)、
+                 outcome、usageSource、reservedTokens、chargedTokens、deadlineAt、recovered
+UsageOperation   生成类 HTTP 操作的幂等锁：userId + operationKey、resourceKey、active、expiresAt
+```
+
+额度账户、每日汇总与流水必须在同一 MongoDB 事务内读写，因此本模块要求副本集或 mongos；
+standalone 实例上生成类接口返回 `50301`，不会退化成“先查再扣”。
+
+## 6.10 索引设计
 
 ```text
 User:            username（唯一）
@@ -568,20 +585,27 @@ ChatRecord:      { userId: 1, createdAt: -1 }
 ChatSession:     { userId: 1, updatedAt: -1 }
 ChatMessage:     { sessionId: 1, createdAt: 1 }
 CodeToolRecord:  { userId: 1, createdAt: -1 }
+QuotaAccount:    { userId: 1 }（唯一）
+DailyUsage:      { userId: 1, quotaDate: 1 }（唯一）
+UsageRequest:    { requestId: 1 }（唯一）、{ userId: 1, operationKey: 1 }（唯一）、
+                 { userId: 1, quotaDate: 1, createdAt: -1 }、{ status: 1, deadlineAt: 1 }
+UsageOperation:  { userId: 1, operationKey: 1 }（唯一）、{ userId: 1, resourceKey: 1 }（仅 active 的偏索引）
 ```
 
 ---
 
 # 7. 核心功能
 
-项目包含四大并列功能模块：
+项目包含六大并列功能模块：
 
-| 模块            | 章节    | 状态           |
-| --------------- | ------- | -------------- |
-| ① Prompt 工作台 | 7.2–7.8 | 原有，保持不变 |
-| ② AI 对话       | 7.9     | 新增           |
-| ③ 代码工具      | 7.10    | 新增           |
-| ④ 历史记录      | 7.11    | 新增           |
+| 模块            | 章节    | 状态               |
+| --------------- | ------- | ------------------ |
+| ① Prompt 工作台 | 7.2–7.8 | 原有，保持不变     |
+| ② AI 对话       | 7.9     | 新增               |
+| ③ 代码工具      | 7.10    | 新增               |
+| ④ AI 工作流     | —（见 README） | 新增（MVP）  |
+| ⑤ 历史记录      | 7.11    | 新增               |
+| ⑥ 使用量与额度  | `docs/usage-quota-development.md` | 新增（待浏览器验收） |
 
 ## 7.1 用户登录
 
@@ -1463,6 +1487,18 @@ POST /api/code-tools/:key/stream          # SSE 流式执行
 GET /api/history?keyword=&type=chat|code-tool&page=1&pageSize=20
 ```
 
+## 使用量与额度 Usage（全部 🔒）
+
+```http
+GET   /api/usage/overview?days=7|30   # 今日额度 + 趋势 + 按模型/来源分布
+GET   /api/usage/records              # 明细分页（page / pageSize / source / model / date）
+PATCH /api/usage/quota                # 修改每日 Token 预算（不改变历史额度日）
+```
+
+副作用：`PATCH` 更新账户与当日预算快照；四类生成接口在调用前预占额度，额度不足或并发超限分别返回
+`42201`（单次超预算）/ `42202`（预算下调过低）/ `42901`（当日不足）/ `42902`（并发已达 3）；
+计量数据库不可用时返回 `50301`。资源归属一律取 `req.user.userId`。
+
 ---
 
 # 9. 统一响应格式
@@ -1780,7 +1816,7 @@ location /api/chat/stream {
 
 # 14. 前端页面
 
-共 8 个页面，对应四大模块：
+共 9 个页面，对应各模块：
 
 | 模块            | 页面                                       |
 | --------------- | ------------------------------------------ |
@@ -1788,7 +1824,9 @@ location /api/chat/stream {
 | ① Prompt 工作台 | Prompt 管理页 / Prompt 工作台 / 调用历史页 |
 | ② AI 对话       | AI 对话页 / Provider 配置页                |
 | ③ 代码工具      | 代码工具页                                 |
-| ④ 历史记录      | 历史记录页                                 |
+| ④ AI 工作流     | AI 工作流页                                |
+| ⑤ 历史记录      | 历史记录页                                 |
+| ⑥ 使用量与额度  | 使用量与额度页（`/usage`）                 |
 
 ## 登录页
 

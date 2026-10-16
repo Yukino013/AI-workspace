@@ -1,3 +1,4 @@
+import { withUsageOperation } from "../services/usage/operation.service.js";
 import { Router } from "express";
 import { auth } from "../middleware/auth.middleware.js";
 import { validate } from "../middleware/validate.middleware.js";
@@ -8,8 +9,8 @@ import { recordDetail, records, removeRecord, run, stream } from "../controllers
 const router = Router();
 router.use(auth);
 
-router.post("/", validate(chatSchema), run);
-router.post("/stream", validate(chatSchema), stream);
+router.post("/", validate(chatSchema), withUsageOperation(run));
+router.post("/stream", validate(chatSchema), withUsageOperation(stream));
 
 export default router;
 

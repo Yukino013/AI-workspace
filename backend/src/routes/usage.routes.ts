@@ -1,0 +1,12 @@
+import { Router } from 'express';
+import { z } from 'zod';
+import { auth } from '../middleware/auth.middleware.js';
+import { validate } from '../middleware/validate.middleware.js';
+import { overview, records, update } from '../controllers/usage.controller.js';
+import { MAX_DAILY_LIMIT } from '../models/usage.model.js';
+const router = Router();
+router.use(auth);
+router.get('/overview', overview);
+router.get('/records', records);
+router.patch('/quota', validate(z.object({ dailyTokenLimit: z.number().int().min(1).max(MAX_DAILY_LIMIT) }).strict()), update);
+export default router;
